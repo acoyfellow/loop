@@ -1,12 +1,20 @@
 import alchemy from "alchemy";
 import { Ai, D1Database, DurableObjectNamespace, SvelteKit, Worker } from "alchemy/cloudflare";
-import { CloudflareStateStore } from "alchemy/state";
+import { CloudflareStateStore, FileSystemStateStore } from "alchemy/state";
 import type { LoopDO } from "./worker/LoopDO.ts";
 
 const projectName = "loop";
 const app = await alchemy(projectName, {
   password: process.env.ALCHEMY_PASSWORD || "local-loop-password",
-  stateStore: (scope) => new CloudflareStateStore(scope),
+  stateStore: (scope) =>
+    scope.local
+      ? new FileSystemStateStore(scope)
+      : new CloudflareStateStore(scope, {
+          scriptName: `${projectName}-state`,
+          apiToken: alchemy.secret(process.env.CLOUDFLARE_API_TOKEN || ""),
+          stateToken: alchemy.secret(process.env.ALCHEMY_STATE_TOKEN || ""),
+          forceUpdate: true,
+        }),
 });
 
 const isProd = app.stage === "prod";
