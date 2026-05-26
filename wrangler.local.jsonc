@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "loop-local-worker",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-05-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "LOOP", "class_name": "LoopDO" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["LoopDO"] }
+  ],
+  "ai": { "binding": "AI", "remote": true },
+  "vars": {
+    "ENVIRONMENT": "dev",
+    "DEV_OWNER": "local-jordan",
+    "LOOP_MODEL": "@cf/moonshotai/kimi-k2.6"
+  }
+}

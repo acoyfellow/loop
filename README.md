@@ -1,75 +1,98 @@
-# @acoyfellow/loop
+# loop
 
-prepare repos for looping.
-
-## install
-
-```bash
-npx @acoyfellow/loop init
-```
-
-## what it creates
+One permanent agent thread on Cloudflare. The model creates, revises, and remembers the interface as you work.
 
 ```
-AGENTS.md              # how to build/test (you edit this)
-tasks.md               # what to do (you edit this)
-loop.json              # config
-.loop/
-  progress.md          # what's done (append-only)
-  errors.md            # what went wrong (append-only)
-  failures             # consecutive failure count
-  PAUSED               # kill switch (exists = stopped)
-.github/workflows/
-  loop.yml             # CI trigger
+you ──▶ owner thread (Durable Object)
+            ├─ ledger        every message, action, checkpoint
+            ├─ memory        kept preferences and decisions
+            └─ surfaces      Svelte panels compiled on the Worker
 ```
 
-## commands
+Each turn calls Workers AI. When the model emits a `create_panel` / `revise_panel` / `remember` action, the Worker compiles the generated Svelte 5 source and mounts it in the runtime pane. Nothing is mocked.
 
-```bash
-npx @acoyfellow/loop init     # scaffold files
-npx @acoyfellow/loop enter    # one iteration
-npx @acoyfellow/loop watch    # loop until paused
-npx @acoyfellow/loop status   # show state
-npx @acoyfellow/loop pause    # stop
-npx @acoyfellow/loop resume   # continue
+## Run
+
+Requires Bun, Node 22+, and a Cloudflare-authenticated `wrangler` with Workers AI access.
+
+```sh
+bun install
+bun run dev          # starts both the SvelteKit app and the Worker
 ```
 
-## config (loop.json)
+Open <http://127.0.0.1:5176>.
 
-```json
-{
-  "agent": "claude",
-  "maxFailures": 5,
-  "context": ["AGENTS.md", "tasks.md"]
-}
+Try:
+
+> Create a panel called build-status that lists Loop, my-ax, and svelte-edge. Remember that cyan means a running experiment.
+
+You will see, in this order:
+
+1. the message in the `thread` pane;
+2. a `running…` placeholder while Workers AI works (you can send another message immediately);
+3. a compiled Svelte panel mounted in `runtime`;
+4. a kept memory in the `memory` inspector;
+5. the exact generated `.svelte` source under `source`.
+
+Reload — everything survives. `events` shows the immutable record.
+
+## Verify
+
+```sh
+bun run check    # SvelteKit + Worker type-check
+bun run test     # context / compiler unit tests
+bun run e2e      # real Workers AI: panel, memory, durable reload
+bun run stress   # real inference + rolling checkpoint + export
 ```
 
-agents: `claude`, `opencode`, `aider`, `custom`
+`e2e` and `stress` call Workers AI and consume usage.
 
-for custom:
-```json
-{
-  "agent": "custom",
-  "customCommand": "my-agent --prompt"
-}
+## Layout
+
+```
+src/routes/+page.svelte     UI: thread, runtime, source, inspector
+src/routes/+page.server.ts  load thread snapshot
+src/routes/data.remote.ts   getThread, sendMessage, saveMemory
+worker/index.ts             HTTP boundary + owner routing
+worker/LoopDO.ts            ledger, turn, typed actions, memory, export
+worker/context.ts           rolling prompt + checkpoint trigger
+worker/panels.ts            Svelte 5 compile
+worker/types.ts             vocabulary
+wrangler.local.jsonc        local DO + remote Workers AI binding
+alchemy.run.ts              Cloudflare deployment graph
+tests/                      unit + Playwright + API stress
 ```
 
-## the guardrails
+That is the whole core.
 
-1. **something must change** - if agent produces no diff, it's a failure
-2. **failure limit** - after N consecutive failures, loop pauses
-3. **kill switch** - `.loop/PAUSED` file stops everything
-4. **error log** - errors persist so next iteration can avoid them
-5. **progress log** - progress persists so loop knows where it left off
+## Contract
 
-## the philosophy
+| Surface      | Behavior                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------------------- |
+| Thread       | One SQLite-backed Durable Object per authenticated owner                                       |
+| Inference    | Workers AI binding (default `@cf/moonshotai/kimi-k2.6`)                                        |
+| Record       | Messages and runtime actions append immutable events                                           |
+| Context      | Recent 24 events plus retrieved memory, panel state, and last model-written checkpoint summary |
+| Memory       | Typed kept records (`preference`, `decision`, `fact`, `failure`, `open_loop`); `wrong` / `forgotten` are signals, not deletions |
+| Surfaces     | Model emits complete Svelte 5 source; Worker compiles it; iframe mounts the result             |
+| Idempotency  | `requestId` on `/api/messages` prevents duplicate turns                                        |
+| Export       | `GET /api/export` returns the ledger and every panel source revision                           |
 
-you don't run loops. you prepare vessels to enter loops.
+## Boundaries
 
-the repo IS the rig. git gives you:
-- persistence (survives context resets)
-- versioning (every change tracked)
-- triggers (actions, webhooks)
-- portability (clone anywhere)
+- Generated Svelte runs in a sandboxed iframe with no owner credentials or Worker bindings.
+- Backend mutations are fixed typed actions, not generated code.
+- Auth: Better Auth + D1. Local development uses a fixed owner so login is not required.
+- Production sign-up is gated by an invite password (`LOOP_INVITE_PASSWORD`). Sign-in for existing accounts is unaffected. When the env var is unset, sign-up is open — only use that locally.
 
-you're not controlling the work. you're orchestrating the conditions under which loops can safely run.
+## Provenance
+
+`loop` originally prepared repositories for repeated agent runs. This is the same idea at app scale: the vessel is now one durable owner thread the model can read, write, and rebuild the interface inside.
+
+Patterns reused:
+
+- [`remote`](https://github.com/acoyfellow/remote) — authenticated SvelteKit + Durable Objects shell.
+- [`svelte-edge`](https://github.com/acoyfellow/svelte-edge) — Svelte 5 source compiled at the edge.
+- [`deja`](https://github.com/acoyfellow/deja) — durable selected memory discipline.
+
+MIT.

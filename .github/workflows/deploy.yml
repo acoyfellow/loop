@@ -1,0 +1,40 @@
+name: deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - ".github/**"
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://loop.coey.dev
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ALCHEMY_PASSWORD: ${{ secrets.ALCHEMY_PASSWORD }}
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+      BETTER_AUTH_URL: https://loop.coey.dev
+      LOOP_INVITE_PASSWORD: ${{ secrets.LOOP_INVITE_PASSWORD }}
+      LOOP_PUBLIC_DOMAIN: loop.coey.dev
+      LOOP_MODEL: "@cf/moonshotai/kimi-k2.6"
+      STAGE: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.12"
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run build
+      - name: alchemy deploy
+        run: bun run deploy -- --stage prod
