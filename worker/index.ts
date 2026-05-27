@@ -24,7 +24,7 @@ type LoopStub = {
   signalMemory: (id: string, state: "wrong" | "forgotten") => Promise<unknown>;
   exportLedger: () => Promise<unknown>;
   resetThread: () => Promise<ThreadSnapshot>;
-  debugStorage: () => Promise<{ tables: Array<{ name: string; count: number }> }>;
+  debugStorage: () => Promise<{ tables: Array<{ name: string; count: number }>; assistantMessages: Array<{ id: string; session_id: string; role: string; text: string }> }>;
 };
 
 function cors(response: Response, origin: string): Response {

@@ -101,7 +101,7 @@ export class Loop extends Think<LoopEnv> {
     return this.loopSnapshot();
   }
 
-  async debugStorage(): Promise<{ tables: Array<{ name: string; count: number }> }> {
+  async debugStorage(): Promise<{ tables: Array<{ name: string; count: number }>; assistantMessages: Array<{ id: string; session_id: string; role: string; text: string }> }> {
     const tables = this.ctx.storage.sql
       .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name")
       .toArray();
@@ -114,7 +114,14 @@ export class Loop extends Think<LoopEnv> {
         rows.push({ name: t.name, count: -1 });
       }
     }
-    return { tables: rows };
+    let assistantMessages: Array<{ id: string; session_id: string; role: string; text: string }> = [];
+    try {
+      assistantMessages = this.ctx.storage.sql
+        .exec<{ id: string; session_id: string; role: string; content: string }>("SELECT id, session_id, role, substr(coalesce(content, ''), 1, 80) AS content FROM assistant_messages LIMIT 10")
+        .toArray()
+        .map((r) => ({ id: r.id, session_id: r.session_id, role: r.role, text: r.content }));
+    } catch { /* schema mismatch */ }
+    return { tables: rows, assistantMessages };
   }
 
   async loopSnapshot(): Promise<ThreadSnapshot> {
