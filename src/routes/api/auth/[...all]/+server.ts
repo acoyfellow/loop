@@ -1,88 +1,10 @@
+// Better Auth handles /api/auth/* inside src/hooks.server.ts via svelteKitHandler.
+// This file exists only to satisfy SvelteKit's catch-all route pattern when type-generating.
 import type { RequestHandler } from "./$types";
-import { initAuth } from "$lib/auth";
-import { verifyInvite } from "$lib/invite";
 
-async function readJsonBody(request: Request): Promise<{ raw: string; parsed: Record<string, unknown> | null }> {
-  const raw = await request.text();
-  if (!raw) return { raw, parsed: null };
-  try {
-    return { raw, parsed: JSON.parse(raw) as Record<string, unknown> };
-  } catch {
-    return { raw, parsed: null };
-  }
-}
-
-function unauthorized(message: string): Response {
-  return new Response(JSON.stringify({ code: "INVITE_REQUIRED", message }), {
-    status: 403,
+export const fallback: RequestHandler = async () => {
+  return new Response(JSON.stringify({ error: "Auth route not handled" }), {
+    status: 404,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-function unavailable(): Response {
-  return new Response(JSON.stringify({ error: "Authentication service temporarily unavailable" }), {
-    status: 503,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-const SIGNUP_SUFFIXES = ["/sign-up/email", "/sign-up", "sign-up"];
-
-function isSignupPath(pathname: string): boolean {
-  return SIGNUP_SUFFIXES.some((suffix) => pathname.endsWith(suffix));
-}
-
-async function gateSignup(event: Parameters<RequestHandler>[0]): Promise<{ ok: true; request: Request; debug: Record<string, unknown> } | { ok: false; response: Response }> {
-  const debug = {
-    pathname: event.url.pathname,
-    matchedSignup: isSignupPath(event.url.pathname),
-  };
-  if (!isSignupPath(event.url.pathname)) return { ok: true, request: event.request, debug };
-  const { raw, parsed } = await readJsonBody(event.request);
-  const supplied = typeof parsed?.invitePassword === "string" ? parsed.invitePassword : null;
-  if (!verifyInvite(event.platform?.env, supplied)) {
-    return { ok: false, response: unauthorized("Invite password required to create an account.") };
-  }
-  const cleaned = parsed && typeof parsed === "object" ? { ...parsed } : {};
-  delete cleaned.invitePassword;
-  const forwarded = new Request(event.request.url, {
-    method: event.request.method,
-    headers: event.request.headers,
-    body: parsed ? JSON.stringify(cleaned) : raw,
-  });
-  return { ok: true, request: forwarded, debug };
-}
-
-export const GET: RequestHandler = async (event) => {
-  const db = event.platform?.env?.DB;
-  if (!db) return unavailable();
-  try {
-    const auth = initAuth(db, event.platform?.env, event.url.origin);
-    return await auth.handler(event.request);
-  } catch (error) {
-    console.error("auth GET", error);
-    return unavailable();
-  }
-};
-
-export const POST: RequestHandler = async (event) => {
-  const db = event.platform?.env?.DB;
-  if (!db) return unavailable();
-  try {
-    const gate = await gateSignup(event);
-    if (event.url.searchParams.has("debug")) {
-      return new Response(JSON.stringify({
-        pathname: event.url.pathname,
-        matched: isSignupPath(event.url.pathname),
-        invite_len: typeof event.platform?.env?.LOOP_INVITE_PASSWORD === "string" ? event.platform!.env!.LOOP_INVITE_PASSWORD!.length : null,
-        gate_ok: gate.ok,
-      }, null, 2), { headers: { "Content-Type": "application/json" } });
-    }
-    if (!gate.ok) return gate.response;
-    const auth = initAuth(db, event.platform?.env, event.url.origin);
-    return await auth.handler(gate.request);
-  } catch (error) {
-    console.error("auth POST", error);
-    return unavailable();
-  }
 };
