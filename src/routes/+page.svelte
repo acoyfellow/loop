@@ -2,6 +2,7 @@
   import { invalidateAll } from "$app/navigation";
   import { page } from "$app/state";
   import { signIn, signOut, signUp } from "$lib/auth-client";
+  import { Splitpanes, Pane } from "svelte-splitpanes";
   import type { Panel, ThreadSnapshot } from "$lib/thread";
   import { getThread, sendMessage, resetThread } from "./data.remote";
 
@@ -95,8 +96,18 @@
   function panelDocument(panel: Panel): string {
     const escapedCss = panel.revision.css.replace(/<\/style/gi, "<\\/style");
     const moduleUrl = `data:application/javascript;charset=utf-8,${encodeURIComponent(panel.revision.clientJs)}`;
-    const hostCss = `html,body{margin:0;padding:0;background:#0a0a0a;color:#d4d4d4;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto;height:100%}*{scrollbar-width:thin;scrollbar-color:transparent transparent}*:hover{scrollbar-color:#2a2a2e transparent}*::-webkit-scrollbar{width:6px;height:6px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:transparent;border-radius:3px}*:hover::-webkit-scrollbar-thumb{background:#2a2a2e}*::-webkit-scrollbar-thumb:hover{background:#3f3f46}*::-webkit-scrollbar-corner{background:transparent}`;
-    return `<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify({ imports: { svelte: "https://esm.sh/svelte@5", "svelte/": "https://esm.sh/svelte@5/" } })}<\/script><style>${hostCss}</style><style>${escapedCss}</style></head><body><div id="app"></div><script type="module">import Component from ${JSON.stringify(moduleUrl)}; import { mount } from "svelte"; mount(Component,{target:document.getElementById("app")});<\/script></body></html>`;
+    const hostCss = `html,body{margin:0;padding:0;background:#0a0a0a;color:#d4d4d4;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto;min-height:100%}body{display:flex;align-items:center;justify-content:center}*{scrollbar-width:thin;scrollbar-color:transparent transparent}*:hover{scrollbar-color:#2a2a2e transparent}*::-webkit-scrollbar{width:6px;height:6px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:transparent;border-radius:3px}*:hover::-webkit-scrollbar-thumb{background:#2a2a2e}*::-webkit-scrollbar-thumb:hover{background:#3f3f46}*::-webkit-scrollbar-corner{background:transparent}`;
+    const fitScript = `
+      const post = () => {
+        const h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+        parent.postMessage({ type: "loop:fit", id: ${JSON.stringify(panel.id)}, height: h }, "*");
+      };
+      const ro = new ResizeObserver(post);
+      ro.observe(document.documentElement);
+      window.addEventListener("load", post);
+      setTimeout(post, 50);
+    `;
+    return `<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify({ imports: { svelte: "https://esm.sh/svelte@5", "svelte/": "https://esm.sh/svelte@5/" } })}<\/script><style>${hostCss}</style><style>${escapedCss}</style></head><body><div id="app"></div><script type="module">import Component from ${JSON.stringify(moduleUrl)}; import { mount } from "svelte"; mount(Component,{target:document.getElementById("app")});<\/script><script>${fitScript}<\/script></body></html>`;
   }
 
   function openSource(panel: Panel) {
@@ -104,10 +115,28 @@
     mainTab = "source";
   }
 
+  let panelHeights = $state<Record<string, number>>({});
+
   function handlePanelMessage(event: MessageEvent) {
-    if (event.data?.type !== "loop:action") return;
-    composer = `Focus on ${String(event.data.value ?? "this selection")}.`;
+    const data = event.data;
+    if (data?.type === "loop:fit" && typeof data.id === "string" && typeof data.height === "number") {
+      const clamped = Math.max(180, Math.min(360, Math.round(data.height)));
+      if (panelHeights[data.id] !== clamped) panelHeights = { ...panelHeights, [data.id]: clamped };
+      return;
+    }
+    if (data?.type !== "loop:action") return;
+    composer = `Focus on ${String(data.value ?? "this selection")}.`;
   }
+
+  let isWide = $state(true);
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 960px)");
+    const sync = () => { isWide = mq.matches; };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  });
 
   function keydown(event: KeyboardEvent) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -188,95 +217,120 @@
       {#if error}<pre>{error}</pre>{/if}
     </section>
   {:else}
-    <main class="grid">
-      <section class="transcript" class:hidden-pane={mainTab !== "thread"}>
-        <div class="section-head">
-          <span>thread/main</span>
-          <code>messages {thread.stats.messageCount}</code>
-        </div>
-        <div class="log">
-          {#each messages as message (message.key)}
-            <article class:user={message.kind === "user"}>
-              <span class="role">{message.kind === "pending" ? "assistant" : message.kind}</span>
-              <pre class:pending={message.kind === "pending"}>{message.text}</pre>
-            </article>
-          {/each}
-        </div>
-        <form onsubmit={(event) => { event.preventDefault(); submit(); }}>
-          <textarea bind:value={composer} onkeydown={keydown} placeholder="message loop… e.g. revise the active-work surface and remember a convention" rows="4"></textarea>
-          <footer><code>⌘↵ send</code><span class="queue">{inflight ? `${inflight} in flight` : ""}</span><button disabled={!composer.trim()}>send</button></footer>
-        </form>
-        {#if error}<pre class="error">{error}</pre>{/if}
-        {#if stuckOrphan}
-          <pre class="error">Last turn didn’t produce an assistant reply. Try again or <button class="plain inline" onclick={resetLoop}>reset the loop</button>.</pre>
-        {/if}
-      </section>
-
-      <section class="runtime" class:hidden-pane={mainTab === "source"}>
-        <div class="section-head"><span>{mainTab === "runtime" ? "runtime / mounted surfaces" : "surfaces"}</span><code>{pinnedPanels.length} mounted</code></div>
-        <div class="mounts">
-          {#each pinnedPanels as panel}
-            <article class="mount">
-              <header>
-                <strong>{panel.id}</strong>
-                <code>{panel.revision.sourceHash.slice(0, 10)}</code>
-                <button class="plain" onclick={() => openSource(panel)}>source</button>
-              </header>
-              <iframe title={panel.title} srcdoc={panelDocument(panel)} sandbox="allow-scripts"></iframe>
-            </article>
-          {/each}
-        </div>
-      </section>
-
-      {#if mainTab === "source"}
-        <section class="source-view">
-          <div class="section-head"><span>source</span><code>{thread.panels.length} revisions active</code></div>
-          <div class="source-layout">
-            <nav class="files">
-              {#each thread.panels as panel}
-                <button class:chosen={selectedPanel?.id === panel.id} onclick={() => selectedPanelId = panel.id}>{panel.id}.svelte</button>
-              {/each}
-            </nav>
-            {#if selectedPanel}
-              <div class="editor">
-                <header><strong>{selectedPanel.id}.svelte</strong><code>{selectedPanel.revision.sourceHash}</code></header>
-                <pre>{selectedPanel.revision.source}</pre>
-              </div>
-            {:else}
-              <p class="empty">No generated surfaces yet.</p>
-            {/if}
-          </div>
-        </section>
+    {#snippet transcriptPane()}
+      <div class="section-head">
+        <span>thread/main</span>
+        <code>messages {thread.stats.messageCount}</code>
+      </div>
+      <div class="log">
+        {#each messages as message (message.key)}
+          <article class:user={message.kind === "user"}>
+            <span class="role">{message.kind === "pending" ? "assistant" : message.kind}</span>
+            <pre class:pending={message.kind === "pending"}>{message.text}</pre>
+          </article>
+        {/each}
+      </div>
+      <form onsubmit={(event) => { event.preventDefault(); submit(); }}>
+        <textarea bind:value={composer} onkeydown={keydown} placeholder="message loop… e.g. revise the active-work surface and remember a convention" rows="4"></textarea>
+        <footer><code>⌘↵ send</code><span class="queue">{inflight ? `${inflight} in flight` : ""}</span><button disabled={!composer.trim()}>send</button></footer>
+      </form>
+      {#if error}<pre class="error">{error}</pre>{/if}
+      {#if stuckOrphan}
+        <pre class="error">Last turn didn’t produce an assistant reply. Try again or <button class="plain inline" onclick={resetLoop}>reset the loop</button>.</pre>
       {/if}
+    {/snippet}
 
-      <aside class="inspect">
-        <div class="tabs">
-          <button class:chosen={sideTab === "state"} onclick={() => sideTab = "state"}>state</button>
-          <button class:chosen={sideTab === "memory"} onclick={() => sideTab = "memory"}>memory</button>
-          <button class:chosen={sideTab === "recent"} onclick={() => sideTab = "recent"}>recent</button>
-        </div>
-        {#if sideTab === "state"}
-          <dl>
-            <dt>thread</dt><dd>main</dd>
-            <dt>owner</dt><dd>{page.data.user?.email ?? "—"}</dd>
-            <dt>messages</dt><dd>{thread.stats.messageCount}</dd>
-            <dt>surfaces</dt><dd>{thread.stats.panelCount}</dd>
-            <dt>memories</dt><dd>{thread.stats.memoryCount}</dd>
-          </dl>
-        {:else if sideTab === "memory"}
-          <div class="records">
-            {#each thread.memories.filter((memory) => memory.state === "kept") as memory}
-              <article><code>{memory.kind}</code><p>{memory.text}</p></article>
-            {/each}
+    {#snippet runtimePane()}
+      <div class="section-head"><span>{mainTab === "runtime" ? "runtime / mounted surfaces" : "surfaces"}</span><code>{pinnedPanels.length} mounted</code></div>
+      <div class="mounts">
+        {#each pinnedPanels as panel}
+          <article class="mount">
+            <header>
+              <strong>{panel.id}</strong>
+              <code>{panel.revision.sourceHash.slice(0, 10)}</code>
+              <button class="plain" onclick={() => openSource(panel)}>source</button>
+            </header>
+            <iframe title={panel.title} srcdoc={panelDocument(panel)} sandbox="allow-scripts" style:height={panelHeights[panel.id] ? `${panelHeights[panel.id]}px` : undefined}></iframe>
+          </article>
+        {/each}
+      </div>
+    {/snippet}
+
+    {#snippet sourcePane()}
+      <div class="section-head"><span>source</span><code>{thread.panels.length} revisions active</code></div>
+      <div class="source-layout">
+        <nav class="files">
+          {#each thread.panels as panel}
+            <button class:chosen={selectedPanel?.id === panel.id} onclick={() => selectedPanelId = panel.id}>{panel.id}.svelte</button>
+          {/each}
+        </nav>
+        {#if selectedPanel}
+          <div class="editor">
+            <header><strong>{selectedPanel.id}.svelte</strong><code>{selectedPanel.revision.sourceHash}</code></header>
+            <pre>{selectedPanel.revision.source}</pre>
           </div>
         {:else}
-          <div class="events">
-            {#each [...thread.messages].reverse().slice(0, 30) as message}
-              <div><code>{message.role}</code><span>{message.text}</span></div>
-            {/each}
-          </div>
+          <p class="empty">No generated surfaces yet.</p>
         {/if}
-      </aside>
-    </main>
+      </div>
+    {/snippet}
+
+    {#snippet inspectPane()}
+      <div class="tabs">
+        <button class:chosen={sideTab === "state"} onclick={() => sideTab = "state"}>state</button>
+        <button class:chosen={sideTab === "memory"} onclick={() => sideTab = "memory"}>memory</button>
+        <button class:chosen={sideTab === "recent"} onclick={() => sideTab = "recent"}>recent</button>
+      </div>
+      {#if sideTab === "state"}
+        <dl>
+          <dt>thread</dt><dd>main</dd>
+          <dt>owner</dt><dd>{page.data.user?.email ?? "—"}</dd>
+          <dt>messages</dt><dd>{thread.stats.messageCount}</dd>
+          <dt>surfaces</dt><dd>{thread.stats.panelCount}</dd>
+          <dt>memories</dt><dd>{thread.stats.memoryCount}</dd>
+        </dl>
+      {:else if sideTab === "memory"}
+        <div class="records">
+          {#each thread.memories.filter((memory) => memory.state === "kept") as memory}
+            <article><code>{memory.kind}</code><p>{memory.text}</p></article>
+          {/each}
+        </div>
+      {:else}
+        <div class="events">
+          {#each [...thread.messages].reverse().slice(0, 30) as message}
+            <div><code>{message.role}</code><span>{message.text}</span></div>
+          {/each}
+        </div>
+      {/if}
+    {/snippet}
+
+    {#if isWide}
+      <main class="split">
+        <Splitpanes theme="loop-theme" dblClickSplitter={false}>
+          <Pane size={38} minSize={22}>
+            <section class="transcript">{@render transcriptPane()}</section>
+          </Pane>
+          {#if mainTab === "source"}
+            <Pane size={44} minSize={28}>
+              <section class="source-view">{@render sourcePane()}</section>
+            </Pane>
+          {:else}
+            <Pane size={44} minSize={28}>
+              <section class="runtime">{@render runtimePane()}</section>
+            </Pane>
+          {/if}
+          <Pane size={18} minSize={14} maxSize={36}>
+            <aside class="inspect">{@render inspectPane()}</aside>
+          </Pane>
+        </Splitpanes>
+      </main>
+    {:else}
+      <main class="stack">
+        {#if mainTab === "thread"}<section class="transcript">{@render transcriptPane()}</section>{/if}
+        {#if mainTab === "runtime"}<section class="runtime">{@render runtimePane()}</section>{/if}
+        {#if mainTab === "source"}<section class="source-view">{@render sourcePane()}</section>{/if}
+        <aside class="inspect">{@render inspectPane()}</aside>
+      </main>
+    {/if}
   {/if}
 </div>

@@ -77,12 +77,26 @@ code, pre, .mono { font-family: var(--font-mono); font-size: 12.5px; }
 .plain { background: transparent; border: 0; color: var(--muted); padding: 0; font-size: 11.5px; }
 .plain:hover { color: var(--bright); }
 
-.grid { height: calc(100vh - 40px); display: grid; grid-template-columns: minmax(380px, 1.03fr) minmax(360px, .95fr) 260px; }
-.transcript, .runtime, .source-view, .inspect { min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-.hidden-pane { display: none; }
-.grid:has(.transcript.hidden-pane) { grid-template-columns: minmax(680px, 1fr) 300px; }
-.grid:has(.source-view) { grid-template-columns: minmax(680px, 1fr) 300px; }
-.inspect { border-right: 0; }
+/* Wide layout: Splitpanes drives the columns; section components fill their pane. */
+.split { height: calc(100vh - 40px); }
+.split :global(.splitpanes) { height: 100%; }
+.split :global(.splitpanes__pane) { background: var(--bg); overflow: hidden; }
+.split :global(.splitpanes__pane) > section,
+.split :global(.splitpanes__pane) > aside { height: 100%; }
+.transcript, .runtime, .source-view, .inspect { min-height: 0; display: flex; flex-direction: column; height: 100%; }
+
+/* Splitpanes theme: thin gutter that matches our border, accent on hover/drag. */
+.split :global(.splitpanes--vertical > .splitpanes__splitter) { width: 4px; min-width: 4px; background: var(--border); cursor: col-resize; transition: background 120ms; }
+.split :global(.splitpanes--horizontal > .splitpanes__splitter) { height: 4px; min-height: 4px; background: var(--border); cursor: row-resize; transition: background 120ms; }
+.split :global(.splitpanes__splitter:hover),
+.split :global(.splitpanes--dragging .splitpanes__splitter) { background: var(--accent); }
+
+/* Narrow layout: stack the panes and let the mainTab choose which is visible. */
+.stack { display: flex; flex-direction: column; min-height: calc(100vh - 40px); }
+.stack .transcript { min-height: 58vh; }
+.stack .runtime, .stack .source-view { min-height: 320px; }
+.stack .inspect { min-height: 220px; }
+.stack .transcript, .stack .runtime, .stack .source-view, .stack .inspect { border-bottom: 1px solid var(--border); }
 
 .section-head { flex: 0 0 32px; border-bottom: 1px solid var(--border); padding: 0 12px; display: flex; align-items: center; justify-content: space-between; color: var(--muted); }
 .section-head span { color: var(--text); font-size: 12px; font-weight: 500; }
@@ -111,14 +125,22 @@ form footer button:disabled { opacity: .35; cursor: default; background: transpa
 .error .plain.inline { display: inline; padding: 0 2px; color: #fca5a5; text-decoration: underline; }
 .error .plain.inline:hover { color: #fee2e2; }
 
-.mounts { flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-.mount { border: 1px solid var(--border); background: var(--panel); border-radius: 10px; overflow: hidden; }
-.mount > header { height: 28px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; padding: 0 10px; }
+/* Runtime pane is the query container; mounts inside reflow against its width. */
+.runtime { container-type: inline-size; container-name: runtime; }
+.mounts { flex: 1; overflow: auto; padding: 10px; display: grid; gap: 10px; grid-template-columns: 1fr; align-content: start; }
+@container runtime (min-width: 640px) {
+  .mounts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container runtime (min-width: 1080px) {
+  .mounts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.mount { container-type: inline-size; container-name: mount; border: 1px solid var(--border); background: var(--panel); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.mount > header { height: 28px; flex: 0 0 28px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; padding: 0 10px; }
 .mount header strong { color: var(--bright); font-weight: 500; font-size: 12px; }
-.mount header code { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
+.mount header code { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
 .mount header button { margin-left: auto; padding: 2px 9px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; }
 .mount header button:hover { color: var(--bright); border-color: #3f3f46; }
-.mount iframe { display: block; height: 220px; width: 100%; border: 0; background: #0a0a0a; }
+.mount iframe { display: block; width: 100%; min-height: 180px; max-height: 360px; border: 0; background: #0a0a0a; }
 
 .tabs { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .tabs button { flex: 1; border: 1px solid transparent; background: transparent; color: var(--muted); padding: 4px 8px; border-radius: var(--radius-pill); font-size: 11.5px; }
@@ -170,13 +192,6 @@ dd { margin: 0; color: var(--text); word-break: break-all; }
   .bar { gap: 10px; padding: 0 10px; }
   .bar nav button { padding: 3px 9px; font-size: 11.5px; }
   .bar-right { display: none; }
-  .grid,
-  .grid:has(.transcript.hidden-pane),
-  .grid:has(.source-view) { display: flex; width: 100%; height: auto; min-height: calc(100vh - 40px); flex-direction: column; }
-  .transcript, .runtime, .source-view, .inspect { min-width: 0; border-right: 0; border-bottom: 1px solid var(--border); }
-  .transcript { min-height: 58vh; }
-  .runtime, .source-view { min-height: 320px; }
-  .inspect { min-height: 220px; }
   .log article { grid-template-columns: 56px minmax(0, 1fr); gap: 8px; }
 }
 
@@ -186,5 +201,5 @@ dd { margin: 0; color: var(--text); word-break: break-all; }
   .log .role { display: block; margin-bottom: 4px; }
   .source-layout { grid-template-columns: 1fr; }
   .files { border-right: 0; border-bottom: 1px solid var(--border); flex-direction: row; overflow-x: auto; }
-  .mount iframe { height: 220px; }
+  .mount iframe { min-height: 180px; max-height: 280px; }
 }
