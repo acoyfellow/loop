@@ -26,6 +26,7 @@ const SYSTEM_PROMPT = [
   "Speak plainly. Be specific. Avoid filler.",
   "When the user asks for an interface, panel, dashboard, widget, etc., call `panel` exactly once with `id`, `title`, and full Svelte 5 source.",
   "Reuse an existing panel id to revise it; pick a new kebab-case id for a new artifact.",
+  "When the user asks to remove, delete, drop, kill, or unmount an artifact, call `delete_panel` with the matching id.",
   "Generated Svelte must use runes (`$state`, `$derived`, `$props`), no `export let`, no `on:click`, and stay self-contained (no external imports).",
   "When the user states a stable preference, decision, fact, failure lesson, or open loop, call `remember` once with the matching kind.",
   "This session has rolling memory: only the most recent turns stay verbatim in context. Earlier turns are searchable via `search_context` — use it if the user references something you don’t see directly.",
@@ -143,6 +144,20 @@ export class Loop extends Think<LoopEnv> {
           };
         },
       }),
+      delete_panel: tool({
+        description: "Delete an artifact (panel) the user no longer wants. Provide the kebab-case panel id. Use this when the user says 'remove' or 'delete' or 'kill' a panel.",
+        inputSchema: z.object({
+          id: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/i, "use kebab-case ids"),
+        }),
+        execute: async ({ id }) => {
+          this.ensureTables();
+          const existed = this.panelRow(id);
+          if (!existed) return { ok: false, panelId: id, status: "not-found" as const };
+          this.ctx.storage.sql.exec("DELETE FROM panel_revisions WHERE panel_id = ?", id);
+          this.ctx.storage.sql.exec("DELETE FROM panels WHERE id = ?", id);
+          return { ok: true, panelId: id, status: "deleted" as const };
+        },
+      }),
       remember: tool({
         description: "Commit a durable memory: a preference, decision, fact, failure lesson, or open loop. Use exact wording requested by the user.",
         inputSchema: z.object({
@@ -224,6 +239,13 @@ export class Loop extends Think<LoopEnv> {
         memoryCount: this.scalarInt("SELECT COUNT(*) AS n FROM memories WHERE state = 'kept'"),
       },
     };
+  }
+
+  async deleteArtifact(id: string): Promise<{ ok: boolean }> {
+    this.ensureTables();
+    this.ctx.storage.sql.exec("DELETE FROM panel_revisions WHERE panel_id = ?", id);
+    this.ctx.storage.sql.exec("DELETE FROM panels WHERE id = ?", id);
+    return { ok: true };
   }
 
   async signalMemory(id: string, state: "wrong" | "forgotten"): Promise<Memory | null> {

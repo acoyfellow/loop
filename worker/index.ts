@@ -24,6 +24,7 @@ type LoopStub = {
   signalMemory: (id: string, state: "wrong" | "forgotten") => Promise<unknown>;
   exportLedger: () => Promise<unknown>;
   resetThread: () => Promise<ThreadSnapshot>;
+  deleteArtifact: (id: string) => Promise<{ ok: boolean }>;
 };
 
 function cors(response: Response, origin: string): Response {
@@ -116,6 +117,12 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/api/reset") {
         return cors(Response.json({ ok: true, snapshot: await stub.resetThread() }), origin);
+      }
+      if (request.method === "POST" && url.pathname.startsWith("/api/artifacts/") && url.pathname.endsWith("/delete")) {
+        const id = decodeURIComponent(url.pathname.split("/")[3] ?? "");
+        if (!id) return cors(Response.json({ error: "artifact id required" }, { status: 400 }), origin);
+        await stub.deleteArtifact(id);
+        return cors(Response.json({ ok: true, snapshot: await stub.loopSnapshot() }), origin);
       }
       if (request.method === "POST" && url.pathname === "/api/compile-panel") {
         const body = (await request.json().catch(() => ({}))) as { id?: string; title?: string; source?: string };

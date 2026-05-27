@@ -146,8 +146,12 @@ form footer button:disabled { opacity: .35; cursor: default; background: transpa
 .mount > header { height: 28px; flex: 0 0 28px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; padding: 0 10px; }
 .mount header strong { color: var(--bright); font-weight: 500; font-size: 12px; }
 .mount header code { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
-.mount header button { margin-left: auto; padding: 2px 9px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; }
-.mount header button:hover { color: var(--bright); border-color: #3f3f46; }
+.mount header button { padding: 2px 9px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; }
+.mount header button:first-of-type { margin-left: auto; }
+.mount header button:hover:not(:disabled) { color: var(--bright); border-color: #3f3f46; }
+.mount header button.danger { padding: 2px 8px; min-width: 24px; font-family: var(--font-mono); }
+.mount header button.danger:hover:not(:disabled) { color: #fca5a5; border-color: #542323; }
+.mount header button:disabled { opacity: 0.4; cursor: default; }
 .mount iframe { display: block; width: 100%; min-height: 180px; max-height: 360px; border: 0; background: #0a0a0a; }
 
 .tabs { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--border); }

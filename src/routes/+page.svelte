@@ -4,7 +4,7 @@
   import { signIn, signOut, signUp } from "$lib/auth-client";
   import { Splitpanes, Pane } from "svelte-splitpanes";
   import type { Panel, ThreadSnapshot } from "$lib/thread";
-  import { getThread, sendMessage, resetThread } from "./data.remote";
+  import { getThread, sendMessage, resetThread, deleteArtifact } from "./data.remote";
   import { highlightSvelte } from "$lib/highlight";
 
   let { data } = $props();
@@ -66,6 +66,21 @@
     } finally {
       inflight -= 1;
       pendingTurns = pendingTurns.filter((turn) => turn.id !== requestId);
+    }
+  }
+
+  let deletingId = $state<string | null>(null);
+  async function removeArtifact(id: string) {
+    if (deletingId) return;
+    deletingId = id;
+    error = "";
+    try {
+      live = await deleteArtifact({ id });
+      if (selectedPanelId === id) selectedPanelId = null;
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      deletingId = null;
     }
   }
 
@@ -280,6 +295,7 @@
               <strong>{panel.id}</strong>
               <code>{panel.revision.sourceHash.slice(0, 10)}</code>
               <button class="plain" onclick={() => openSource(panel)}>source</button>
+              <button class="plain danger" disabled={deletingId === panel.id} title="Delete this artifact" aria-label="Delete artifact {panel.id}" onclick={() => removeArtifact(panel.id)}>{deletingId === panel.id ? "…" : "×"}</button>
             </header>
             <iframe title={panel.title} srcdoc={panelDocument(panel)} sandbox="allow-scripts" style:height={panelHeights[panel.id] ? `${panelHeights[panel.id]}px` : undefined}></iframe>
           </article>

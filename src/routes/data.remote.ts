@@ -62,3 +62,11 @@ export const resetThread = command(
   },
 );
 
+export const deleteArtifact = command(
+  "unchecked",
+  async (input: { id: string }): Promise<ThreadSnapshot> => {
+    const result = await callWorker<{ snapshot: ThreadSnapshot }>(`/api/artifacts/${encodeURIComponent(input.id)}/delete`, { method: "POST" });
+    return result.snapshot;
+  },
+);
+
