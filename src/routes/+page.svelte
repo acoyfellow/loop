@@ -85,10 +85,11 @@
   }
 
   const stuckOrphan = $derived(
-    thread &&
+    thread !== null &&
     thread.messages.length > 0 &&
     thread.messages[thread.messages.length - 1].role === "user" &&
-    inflight === 0,
+    inflight === 0 &&
+    pendingTurns.length === 0,
   );
 
   function panelDocument(panel: Panel): string {

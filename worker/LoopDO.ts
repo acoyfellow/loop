@@ -94,35 +94,35 @@ export class Loop extends Think<LoopEnv> {
   async resetThread(): Promise<ThreadSnapshot> {
     this.ensureTables();
     try { this.resetTurnState(); } catch { /* no active turn */ }
+    // Think's clearMessages() only deletes rows matching the current sessionId.
+    // Orphan rows from earlier sessions, plus the resumable-stream buffer, accumulate.
+    // We wipe everything Think + agents/chat own, unconditionally.
     try { await this.clearMessages(); } catch { /* best-effort */ }
+    const wipeSql = [
+      "DELETE FROM assistant_messages",
+      "DELETE FROM assistant_compactions",
+      "DELETE FROM assistant_config",
+      "DELETE FROM assistant_fts",
+      "DELETE FROM cf_ai_chat_stream_chunks",
+      "DELETE FROM cf_ai_chat_stream_metadata",
+      "DELETE FROM cf_think_submissions",
+      "DELETE FROM cf_agents_runs",
+      "DELETE FROM cf_agents_facet_runs",
+      "DELETE FROM cf_agents_fibers",
+      "DELETE FROM cf_agent_tool_runs",
+      "DELETE FROM cf_agent_tool_child_runs",
+      "DELETE FROM think_config",
+    ];
+    for (const stmt of wipeSql) {
+      try { this.ctx.storage.sql.exec(stmt); } catch { /* table may not exist on this Think version */ }
+    }
     this.ctx.storage.sql.exec("DELETE FROM panels");
     this.ctx.storage.sql.exec("DELETE FROM panel_revisions");
     this.ctx.storage.sql.exec("DELETE FROM memories");
     return this.loopSnapshot();
   }
 
-  async debugStorage(): Promise<{ tables: Array<{ name: string; count: number }>; assistantMessages: Array<{ id: string; session_id: string; role: string; text: string }> }> {
-    const tables = this.ctx.storage.sql
-      .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name")
-      .toArray();
-    const rows: Array<{ name: string; count: number }> = [];
-    for (const t of tables) {
-      try {
-        const n = this.ctx.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${t.name}`).toArray()[0]?.n ?? 0;
-        rows.push({ name: t.name, count: n });
-      } catch {
-        rows.push({ name: t.name, count: -1 });
-      }
-    }
-    let assistantMessages: Array<{ id: string; session_id: string; role: string; text: string }> = [];
-    try {
-      assistantMessages = this.ctx.storage.sql
-        .exec<{ id: string; session_id: string; role: string; content: string }>("SELECT id, session_id, role, substr(coalesce(content, ''), 1, 80) AS content FROM assistant_messages LIMIT 10")
-        .toArray()
-        .map((r) => ({ id: r.id, session_id: r.session_id, role: r.role, text: r.content }));
-    } catch { /* schema mismatch */ }
-    return { tables: rows, assistantMessages };
-  }
+
 
   async loopSnapshot(): Promise<ThreadSnapshot> {
     this.ensureTables();
@@ -174,14 +174,29 @@ export class Loop extends Think<LoopEnv> {
   }
 
   private transcript(): LoopMessage[] {
-    const messages = (this as unknown as { messages?: Array<{ id: string; role: string; parts?: Array<{ type: string; text?: string }>; content?: unknown }> }).messages ?? [];
+    type RawPart = { type: string; text?: string; toolName?: string; input?: unknown; output?: unknown };
+    type RawMessage = { id: string; role: string; parts?: Array<RawPart>; content?: unknown };
+    const messages = (this as unknown as { messages?: Array<RawMessage> }).messages ?? [];
     return messages.flatMap((message) => {
       if (message.role !== "user" && message.role !== "assistant") return [];
-      const text = Array.isArray(message.parts)
-        ? message.parts.filter((part) => part.type === "text").map((part) => part.text ?? "").join("")
-        : typeof message.content === "string" ? message.content : "";
-      if (!text.trim()) return [];
-      return [{ id: message.id, role: message.role, text, createdAt: "" }];
+      const parts = Array.isArray(message.parts) ? message.parts : [];
+      const text = parts.filter((part) => part.type === "text").map((part) => part.text ?? "").join("")
+        || (typeof message.content === "string" ? message.content : "");
+      if (text.trim()) return [{ id: message.id, role: message.role, text, createdAt: "" }];
+      // Surface tool-only assistant turns so the UI sees that the model acted, even without a text reply.
+      if (message.role === "assistant") {
+        const toolNames = parts
+          .map((part) => {
+            if (part.type === "tool-call" || part.type?.startsWith("tool-")) return part.toolName;
+            return null;
+          })
+          .filter((name): name is string => typeof name === "string" && name.length > 0);
+        if (toolNames.length > 0) {
+          const unique = [...new Set(toolNames)];
+          return [{ id: message.id, role: "assistant" as const, text: `· ${unique.join(" + ")}`, createdAt: "" }];
+        }
+      }
+      return [];
     });
   }
 
