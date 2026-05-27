@@ -1,21 +1,22 @@
 # loop
 
-One permanent agent thread on Cloudflare. The model creates, revises, and remembers the interface as you work.
+A personal chatbot that **ships working artifacts**. Every reply can compile a real Svelte 5 widget next to the conversation. The assistant also takes notes ("remember that I prefer dark themes") and they stick. One long-running session per account — older turns roll into searchable long-term memory; press **reset** to start over.
 
 Live: <https://loop.coey.dev> · sign-up requires an invite password.
 
 ```
-you ──▶ owner thread (Durable Object)
-            ├─ ledger        every message, action, checkpoint
-            ├─ memory        kept preferences and decisions
-            └─ surfaces      Svelte panels compiled on the Worker
+you ──▶ chat session (Durable Object)
+            ├─ messages    last 16 turns kept verbatim
+            ├─ recall      everything older, embedded in Vectorize
+            ├─ facts       typed notes the assistant decided to save
+            └─ artifacts   Svelte 5 widgets compiled on the edge
 ```
 
-Each turn calls Workers AI. When the model emits a `create_panel` / `revise_panel` / `remember` action, the Worker compiles the generated Svelte 5 source and mounts it in the runtime pane. Nothing is mocked.
+Each turn runs through Workers AI. When the model calls the `panel` tool, the Worker compiles the generated Svelte 5 and mounts it next to the chat. When it calls `remember`, a typed fact is saved. As the conversation grows, older messages are embedded with bge-base-en and pushed into Cloudflare Vectorize; the model can recall them via `search_context`. Nothing is mocked.
 
 ## Run
 
-Requires Bun, Node 22+, and a Cloudflare-authenticated `wrangler` with Workers AI access.
+Requires Bun, Node 22+, and a Cloudflare-authenticated `wrangler` with Workers AI + Vectorize access.
 
 ```sh
 bun install
@@ -26,26 +27,26 @@ Open <http://127.0.0.1:5176>. The live deployment lives at <https://loop.coey.de
 
 Try:
 
-> Create a panel called build-status that lists Loop, my-ax, and svelte-edge. Remember that cyan means a running experiment.
+> Create a panel called build-status that lists three repos in cyan. Remember that cyan means a running experiment.
 
 You will see, in this order:
 
-1. the message in the `thread` pane;
+1. the message appear in **chat**;
 2. a `running…` placeholder while Workers AI works (you can send another message immediately);
-3. a compiled Svelte panel mounted in `runtime`;
-4. a kept memory in the `memory` inspector;
-5. the exact generated `.svelte` source under `source`.
+3. a compiled Svelte widget mounted in **artifacts**;
+4. a saved fact appear in **facts**;
+5. the exact generated `.svelte` under **source** with syntax highlighting.
 
-Reload — everything survives. `events` shows the immutable record.
+Reload — everything survives. After ~16 turns, older messages start getting embedded into Vectorize; the model can search them on demand.
 
 ## Verify
 
 ```sh
 bun run check    # SvelteKit + Worker type-check
-bun run test     # context / compiler unit tests
+bun run test     # unit tests
 bun run verify   # check + test + build (runs automatically on git push)
-bun run e2e      # real Workers AI: panel, memory, durable reload
-bun run stress   # real inference + rolling checkpoint + export
+bun run e2e      # real Workers AI: artifact, fact, durable reload
+bun run stress   # real inference + rolling window + Vectorize recall + export
 ```
 
 `e2e` and `stress` call Workers AI and consume usage.
@@ -63,32 +64,44 @@ Skip the local gate with `git push --no-verify` or `LOOP_SKIP_VERIFY=1`. Trigger
 ## Layout
 
 ```
-src/routes/+page.svelte     UI: thread, runtime, source, inspector
-src/routes/+page.server.ts  load thread snapshot
-src/routes/data.remote.ts   getThread, sendMessage, saveMemory
+src/routes/+page.svelte     UI: chat, artifacts, source, inspector
+src/routes/+page.server.ts  load chat snapshot
+src/routes/data.remote.ts   getThread, sendMessage, resetThread
+src/lib/highlight.ts        Shiki (vitesse-dark, lang=svelte) lazy loaded
 worker/index.ts             HTTP boundary + owner routing
-worker/LoopDO.ts            Loop extends Think — transcript, tools, memory, panels, export
+worker/LoopDO.ts            Loop extends Think — messages, tools, facts, artifacts, recall
+worker/recall.ts            Vectorize-backed long-term memory (bge-base-en, top-k)
 worker/panels.ts            Svelte 5 compile
 worker/types.ts             vocabulary
-wrangler.local.jsonc        local DO + remote Workers AI binding
+wrangler.local.jsonc        local DO + remote Workers AI + Vectorize
 alchemy.run.ts              Cloudflare deployment graph
 tests/                      unit + Playwright + API stress
 ```
 
 That is the whole core.
 
+## How memory works
+
+There is exactly **one chat session per account**. No conversation list, no folders, no compaction, no auto-summarization.
+
+- The most recent **16 messages** stay verbatim in the prompt every turn.
+- When the count exceeds 16, the oldest pair is embedded (Workers AI `@cf/baai/bge-base-en-v1.5`, 768-dim) and upserted into a Cloudflare Vectorize index, namespaced by owner.
+- The model gets a `search_context` tool. When the user asks about something out-of-window, it queries Vectorize, top-k 5, and pulls the matches back into the prompt.
+- The **facts** table is the model's deliberate memory: typed entries (`preference`, `decision`, `fact`, `failure`, `open_loop`) created when the user explicitly says "remember…". These never get rolled out.
+- **`reset`** wipes everything — messages, artifacts, facts, and Vectorize entries — and starts the same single session over.
+
 ## Contract
 
 | Surface      | Behavior                                                                                       |
 | ------------ | ---------------------------------------------------------------------------------------------- |
-| Thread       | One SQLite-backed Durable Object per authenticated owner                                       |
+| Chat         | One SQLite-backed Durable Object per authenticated owner                                       |
 | Inference    | Workers AI binding (default `@cf/moonshotai/kimi-k2.6`)                                        |
-| Record       | Messages and runtime actions append immutable events                                           |
-| Context      | Recent 24 events plus retrieved memory, panel state, and last model-written checkpoint summary |
-| Memory       | Typed kept records (`preference`, `decision`, `fact`, `failure`, `open_loop`); `wrong` / `forgotten` are signals, not deletions |
-| Surfaces     | Model emits complete Svelte 5 source; Worker compiles it; iframe mounts the result             |
+| Window       | Last 16 messages kept verbatim; older ones evicted to Vectorize each turn                      |
+| Recall       | Workers AI embeddings (`@cf/baai/bge-base-en-v1.5`) into a Vectorize index, scoped by owner    |
+| Facts        | Typed records (`preference`, `decision`, `fact`, `failure`, `open_loop`); `wrong` / `forgotten` are signals, not deletions |
+| Artifacts    | Model emits complete Svelte 5 source; Worker compiles it; iframe mounts the result             |
 | Idempotency  | `requestId` on `/api/messages` prevents duplicate turns                                        |
-| Export       | `GET /api/export` returns the ledger and every panel source revision                           |
+| Export       | `GET /api/export` returns the full chat history and every artifact revision                    |
 
 ## Boundaries
 
@@ -99,7 +112,7 @@ That is the whole core.
 
 ## Provenance
 
-`loop` originally prepared repositories for repeated agent runs. This is the same idea at app scale: the vessel is now one durable owner thread the model can read, write, and rebuild the interface inside.
+`loop` originally prepared repositories for repeated agent runs. This is the same idea at app scale: the vessel is now one durable owner session the model can read, write, and rebuild artifacts inside.
 
 Patterns reused:
 

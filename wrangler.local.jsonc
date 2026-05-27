@@ -13,9 +13,13 @@
     { "tag": "v1", "new_sqlite_classes": ["Loop"] }
   ],
   "ai": { "binding": "AI", "remote": true },
+  "vectorize": [
+    { "binding": "MEMORY", "index_name": "loop-memory", "remote": true }
+  ],
   "vars": {
     "ENVIRONMENT": "dev",
     "DEV_OWNER": "local-jordan",
-    "LOOP_MODEL": "@cf/moonshotai/kimi-k2.6"
+    "LOOP_MODEL": "@cf/moonshotai/kimi-k2.6",
+    "LOOP_EMBED_MODEL": "@cf/baai/bge-base-en-v1.5"
   }
 }

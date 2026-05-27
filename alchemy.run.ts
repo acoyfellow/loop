@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Ai, D1Database, DurableObjectNamespace, SvelteKit, Worker } from "alchemy/cloudflare";
+import { Ai, D1Database, DurableObjectNamespace, SvelteKit, VectorizeIndex, Worker } from "alchemy/cloudflare";
 import { CloudflareStateStore, FileSystemStateStore } from "alchemy/state";
 import type { Loop } from "./worker/LoopDO.ts";
 
@@ -34,6 +34,16 @@ const DB = await D1Database(`${projectName}-db`, {
   adopt: true,
 });
 
+// Long-term memory: when older messages fall out of the rolling window we embed
+// them with Workers AI (bge-base-en-v1.5, 768 dims) and stash them here so the
+// agent can recall them later via top-k similarity search.
+const MEMORY = await VectorizeIndex(`${projectName}-memory`, {
+  name: `${prefix}-memory`,
+  dimensions: 768,
+  metric: "cosine",
+  adopt: true,
+});
+
 export const WORKER = await Worker(`${projectName}-worker`, {
   name: `${prefix}-worker`,
   entrypoint: "./worker/index.ts",
@@ -43,7 +53,9 @@ export const WORKER = await Worker(`${projectName}-worker`, {
   bindings: {
     LOOP,
     AI: Ai(),
+    MEMORY,
     LOOP_MODEL: process.env.LOOP_MODEL || "@cf/moonshotai/kimi-k2.6",
+    LOOP_EMBED_MODEL: process.env.LOOP_EMBED_MODEL || "@cf/baai/bge-base-en-v1.5",
   },
   url: false,
 });

@@ -2,26 +2,39 @@ import { Think } from "@cloudflare/think";
 import { tool } from "ai";
 import { z } from "zod";
 import { createWorkersAI } from "workers-ai-provider";
+import type { Session } from "agents/experimental/memory/session";
 import { compilePanel } from "./panels";
+import { Recall, type VectorizeBinding } from "./recall";
 import type { LoopMessage, Memory, MemoryKind, Panel, ThreadSnapshot } from "./types";
 
 export type LoopEnv = {
   AI: Ai;
+  MEMORY?: VectorizeBinding;
   LOOP_MODEL?: string;
+  LOOP_EMBED_MODEL?: string;
 };
 
+// Rolling window: the most recent KEEP_RECENT_MESSAGES stay verbatim in context.
+// Anything older is embedded into Vectorize and dropped from Think's session, so
+// the prompt size stops growing without us. The model can still recall earlier
+// turns via the auto-generated `search_context` tool wired to the `recall` block.
+const KEEP_RECENT_MESSAGES = 16;
+const EVICT_BATCH = 4;
+
 const SYSTEM_PROMPT = [
-  "You are Loop, a persistent personal agent runtime.",
+  "You are Loop, a persistent personal agent that answers in chat and ships working Svelte 5 artifacts.",
   "Speak plainly. Be specific. Avoid filler.",
-  "When the user asks for an interface, panel, surface, dashboard, status, etc., call `panel` exactly once with `id`, `title`, and full Svelte 5 source.",
-  "Reuse an existing panel id to revise it; pick a new kebab-case id for a new surface.",
+  "When the user asks for an interface, panel, dashboard, widget, etc., call `panel` exactly once with `id`, `title`, and full Svelte 5 source.",
+  "Reuse an existing panel id to revise it; pick a new kebab-case id for a new artifact.",
   "Generated Svelte must use runes (`$state`, `$derived`, `$props`), no `export let`, no `on:click`, and stay self-contained (no external imports).",
   "When the user states a stable preference, decision, fact, failure lesson, or open loop, call `remember` once with the matching kind.",
-  "If neither tool fits, reply directly with text.",
+  "This session has rolling memory: only the most recent turns stay verbatim in context. Earlier turns are searchable via `search_context` — use it if the user references something you don’t see directly.",
+  "If none of the tools fit, reply directly with text.",
 ].join(" ");
 
 export class Loop extends Think<LoopEnv> {
   private tablesReady = false;
+  private recallCache: Recall | null = null;
 
   getModel() {
     return createWorkersAI({ binding: this.env.AI })((this.env.LOOP_MODEL ?? "@cf/moonshotai/kimi-k2.6") as never);
@@ -29,6 +42,71 @@ export class Loop extends Think<LoopEnv> {
 
   getSystemPrompt() {
     return SYSTEM_PROMPT;
+  }
+
+  private getRecall(): Recall {
+    if (!this.recallCache) this.recallCache = new Recall(this.env, this.name);
+    return this.recallCache;
+  }
+
+  configureSession(session: Session): Session {
+    const recall = this.getRecall();
+    // Register a searchable recall block. Think auto-wires a `search_context`
+    // tool the model can call to query Vectorize when older context is needed.
+    return session.withContext("recall", {
+      description: "Older turns from this session that fell out of the rolling window. Search by topic, intent, or remembered fact.",
+      provider: {
+        get: async () => null,
+        search: async (query: string) => {
+          const hits = await recall.search(query, 5);
+          if (hits.length === 0) return null;
+          return hits
+            .map((h, i) => `[#${i + 1} · ${h.role} · score ${h.score.toFixed(3)}]\n${h.text}`)
+            .join("\n\n");
+        },
+      },
+    });
+  }
+
+  /**
+   * After each successful turn, push any older messages out of the rolling
+   * window into Vectorize. Best-effort: any failure leaves the message in
+   * place rather than dropping it on the floor.
+   */
+  async onChatResponse(): Promise<void> {
+    try {
+      const all = await this.getMessages();
+      const excess = all.length - KEEP_RECENT_MESSAGES;
+      if (excess <= 0) return;
+      const evictCount = Math.min(EVICT_BATCH, excess);
+      const toEvict = all.slice(0, evictCount);
+      this.ensureTables();
+      const recall = this.getRecall();
+      const evictedIds: string[] = [];
+      for (const message of toEvict) {
+        const role = message.role;
+        if (role !== "user" && role !== "assistant") continue;
+        const text = this.messageText(message);
+        if (!text) continue;
+        const ok = await recall.stash({ id: message.id, role, text, ts: Date.now() });
+        if (ok) {
+          evictedIds.push(message.id);
+          this.ctx.storage.sql.exec("INSERT OR REPLACE INTO recalled (message_id, ts) VALUES (?, ?)", message.id, Date.now());
+        }
+      }
+      if (evictedIds.length > 0) await this.session.deleteMessages(evictedIds);
+    } catch (cause) {
+      console.warn("[loop] recall eviction failed", cause);
+    }
+  }
+
+  private messageText(message: { parts?: Array<{ type: string; text?: string }>; content?: unknown }): string {
+    if (Array.isArray(message.parts)) {
+      const text = message.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
+      if (text.trim()) return text;
+    }
+    if (typeof message.content === "string" && message.content.trim()) return message.content;
+    return "";
   }
 
   getTools() {
@@ -92,6 +170,14 @@ export class Loop extends Think<LoopEnv> {
   }
 
   async resetThread(): Promise<ThreadSnapshot> {
+    // Forget recall entries in Vectorize first.
+    try {
+      const recalledIds = this.ctx.storage.sql
+        .exec<{ message_id: string }>("SELECT message_id FROM recalled")
+        .toArray()
+        .map((r) => r.message_id);
+      if (recalledIds.length > 0) await this.getRecall().forget(recalledIds);
+    } catch { /* table might not exist on first reset; safe to skip */ }
     this.ensureTables();
     try { this.resetTurnState(); } catch { /* no active turn */ }
     // Think's clearMessages() only deletes rows matching the current sessionId.
@@ -119,6 +205,7 @@ export class Loop extends Think<LoopEnv> {
     this.ctx.storage.sql.exec("DELETE FROM panels");
     this.ctx.storage.sql.exec("DELETE FROM panel_revisions");
     this.ctx.storage.sql.exec("DELETE FROM memories");
+    try { this.ctx.storage.sql.exec("DELETE FROM recalled"); } catch { /* fresh DO */ }
     return this.loopSnapshot();
   }
 
@@ -170,6 +257,8 @@ export class Loop extends Think<LoopEnv> {
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, kind TEXT NOT NULL, text TEXT NOT NULL, committed_at TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'kept')");
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS panels (id TEXT PRIMARY KEY, title TEXT NOT NULL, pinned INTEGER NOT NULL, active_revision_id TEXT NOT NULL, updated_at TEXT NOT NULL)");
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS panel_revisions (id TEXT PRIMARY KEY, panel_id TEXT NOT NULL, title TEXT NOT NULL, source TEXT NOT NULL, source_hash TEXT NOT NULL, client_js TEXT NOT NULL, css TEXT NOT NULL, created_at TEXT NOT NULL)");
+    // Track ids we've pushed into Vectorize so /api/reset can purge them too.
+    this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS recalled (message_id TEXT PRIMARY KEY, ts INTEGER NOT NULL)");
     this.tablesReady = true;
   }
 

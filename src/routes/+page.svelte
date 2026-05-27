@@ -197,11 +197,11 @@
     {#if thread}
       <nav>
         {#if isWide}
-          <button class:active={mainTab !== "source"} onclick={() => mainTab = "runtime"}>runtime</button>
+          <button class:active={mainTab !== "source"} onclick={() => mainTab = "runtime"}>artifacts</button>
           <button class:active={mainTab === "source"} onclick={() => mainTab = "source"}>source</button>
         {:else}
-          <button class:active={mainTab === "thread"} onclick={() => mainTab = "thread"}>thread</button>
-          <button class:active={mainTab === "runtime"} onclick={() => mainTab = "runtime"}>runtime</button>
+          <button class:active={mainTab === "thread"} onclick={() => mainTab = "thread"}>chat</button>
+          <button class:active={mainTab === "runtime"} onclick={() => mainTab = "runtime"}>artifacts</button>
           <button class:active={mainTab === "source"} onclick={() => mainTab = "source"}>source</button>
         {/if}
       </nav>
@@ -239,17 +239,17 @@
   {:else}
     {#snippet transcriptPane()}
       <div class="section-head">
-        <span>thread/main</span>
+        <span>chat</span>
         <code>messages {thread.stats.messageCount}</code>
       </div>
       <div class="log">
         {#if messages.length === 0}
           <div class="intro">
-            <p>Ask the model to <strong>create or revise a panel</strong>, or to <strong>remember</strong> something. Generated Svelte 5 compiles on the Worker and mounts in <em>runtime</em>; its source lives in <em>source</em>; kept facts show up in <em>memory</em>.</p>
+            <p>A chatbot that <strong>ships working artifacts</strong>. Every reply can compile a real Svelte 5 widget next to the conversation. The assistant also takes notes <em>(“remember that I prefer dark themes”)</em> and they stick. One long-running session per account — older turns roll into searchable long-term memory; press <strong>reset</strong> to start over.</p>
             <ul>
-              <li><button class="plain inline" onclick={() => composer = "Create a panel 'clock' showing the current time, large and centered, on a dark background. Reply 'mounted'."}>create a panel 'clock' showing the time</button></li>
-              <li><button class="plain inline" onclick={() => composer = "Create a panel 'pulse' — a single neon-cyan ring breathing on a 3s sine wave. Reply 'mounted'."}>create a panel 'pulse' with a breathing ring</button></li>
-              <li><button class="plain inline" onclick={() => composer = "Remember that I prefer dark themes with monospaced numbers."}>remember a preference</button></li>
+              <li><button class="plain inline" onclick={() => composer = "Create a panel 'clock' showing the current time, large and centered, on a dark background. Reply 'mounted'."}>create a clock widget</button></li>
+              <li><button class="plain inline" onclick={() => composer = "Create a panel 'pulse' — a single neon-cyan ring breathing on a 3s sine wave. Reply 'mounted'."}>create a pulse widget</button></li>
+              <li><button class="plain inline" onclick={() => composer = "Remember that I prefer dark themes with monospaced numbers."}>save a preference</button></li>
             </ul>
           </div>
         {:else}
@@ -272,7 +272,7 @@
     {/snippet}
 
     {#snippet runtimePane()}
-      <div class="section-head"><span>{mainTab === "runtime" ? "runtime / mounted surfaces" : "surfaces"}</span><code>{pinnedPanels.length} mounted</code></div>
+      <div class="section-head"><span>artifacts</span><code>{pinnedPanels.length} mounted</code></div>
       <div class="mounts">
         {#each pinnedPanels as panel}
           <article class="mount">
@@ -305,7 +305,7 @@
             {/if}
           </div>
         {:else}
-          <p class="empty">No generated surfaces yet.</p>
+          <p class="empty">No artifacts yet — ask the model to create one.</p>
         {/if}
       </div>
     {/snippet}
@@ -313,16 +313,15 @@
     {#snippet inspectPane()}
       <div class="tabs">
         <button class:chosen={sideTab === "state"} onclick={() => sideTab = "state"}>state</button>
-        <button class:chosen={sideTab === "memory"} onclick={() => sideTab = "memory"}>memory</button>
-        <button class:chosen={sideTab === "recent"} onclick={() => sideTab = "recent"}>recent</button>
+        <button class:chosen={sideTab === "memory"} onclick={() => sideTab = "memory"}>facts</button>
+        <button class:chosen={sideTab === "recent"} onclick={() => sideTab = "recent"}>history</button>
       </div>
       {#if sideTab === "state"}
         <dl>
-          <dt>thread</dt><dd>main</dd>
           <dt>owner</dt><dd>{page.data.user?.email ?? "—"}</dd>
           <dt>messages</dt><dd>{thread.stats.messageCount}</dd>
-          <dt>surfaces</dt><dd>{thread.stats.panelCount}</dd>
-          <dt>memories</dt><dd>{thread.stats.memoryCount}</dd>
+          <dt>artifacts</dt><dd>{thread.stats.panelCount}</dd>
+          <dt>facts</dt><dd>{thread.stats.memoryCount}</dd>
         </dl>
       {:else if sideTab === "memory"}
         <div class="records">
