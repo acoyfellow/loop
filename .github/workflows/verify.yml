@@ -4,6 +4,12 @@ on:
   pull_request:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - ".github/**"
+      - "LICENSE"
+      - "SECURITY.md"
+      - "CONTRIBUTING.md"
 
 concurrency:
   group: verify-${{ github.ref }}
