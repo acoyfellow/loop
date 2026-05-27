@@ -16,11 +16,11 @@ jobs:
         run: bun add -g wrangler@4.95.0
       - name: Show probe rows before
         run: |
-          wrangler d1 execute loop-db --remote --json --command "SELECT id, email, createdAt FROM user WHERE email LIKE '%@example.invalid' ORDER BY createdAt;"
+          wrangler d1 execute loop-db --remote --json --command "SELECT id, email, created_at FROM user WHERE email LIKE '%@example.invalid' ORDER BY created_at;"
       - name: Delete sessions, accounts, users for probe emails
         run: |
-          wrangler d1 execute loop-db --remote --command "DELETE FROM session WHERE userId IN (SELECT id FROM user WHERE email LIKE '%@example.invalid');"
-          wrangler d1 execute loop-db --remote --command "DELETE FROM account WHERE userId IN (SELECT id FROM user WHERE email LIKE '%@example.invalid');"
+          wrangler d1 execute loop-db --remote --command "DELETE FROM session WHERE user_id IN (SELECT id FROM user WHERE email LIKE '%@example.invalid');"
+          wrangler d1 execute loop-db --remote --command "DELETE FROM account WHERE user_id IN (SELECT id FROM user WHERE email LIKE '%@example.invalid');"
           wrangler d1 execute loop-db --remote --command "DELETE FROM user WHERE email LIKE '%@example.invalid';"
       - name: Verify rows after
         run: |
