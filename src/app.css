@@ -118,7 +118,7 @@ form footer button:disabled { opacity: .35; cursor: default; background: transpa
 .mount header code { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
 .mount header button { margin-left: auto; padding: 2px 9px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; }
 .mount header button:hover { color: var(--bright); border-color: #3f3f46; }
-.mount iframe { display: block; height: 260px; width: 100%; border: 0; background: white; }
+.mount iframe { display: block; height: 220px; width: 100%; border: 0; background: #0a0a0a; }
 
 .tabs { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .tabs button { flex: 1; border: 1px solid transparent; background: transparent; color: var(--muted); padding: 4px 8px; border-radius: var(--radius-pill); font-size: 11.5px; }
