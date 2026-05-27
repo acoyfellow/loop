@@ -56,8 +56,6 @@ export const APP = await SvelteKit(`${projectName}-app`, {
   name: `${prefix}-app`,
   adopt: true,
   url: true,
-  compatibilityDate: "2026-05-25",
-  compatibilityFlags: ["nodejs_compat"],
   bindings: { WORKER, DB },
   env: {
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "local-loop-secret-change-before-deploy",
