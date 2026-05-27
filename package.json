@@ -37,6 +37,7 @@
     "alchemy": "^0.93.7",
     "better-auth": "^1.6.4",
     "drizzle-orm": "^0.45.1",
+    "shiki": "^4.1.0",
     "svelte": "^5.55.0",
     "svelte-check": "^4.4.5",
     "svelte-splitpanes": "^8.0.12",

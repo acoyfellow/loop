@@ -110,6 +110,14 @@ code, pre, .mono { font-family: var(--font-mono); font-size: 12.5px; }
 .log article.user pre { color: var(--bright); }
 .pending { color: var(--muted) !important; font-style: italic; }
 
+.intro { color: var(--muted); font-size: 13px; line-height: 1.55; max-width: 460px; padding: 4px 2px; }
+.intro p { margin: 0 0 12px; }
+.intro strong, .intro em { color: var(--text); font-style: normal; font-weight: 500; }
+.intro ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.intro li button.plain.inline { color: var(--accent); text-decoration: none; display: inline; padding: 0; font-size: 13px; text-align: left; }
+.intro li button.plain.inline:hover { color: var(--bright); }
+.intro li::before { content: "› "; color: var(--muted); margin-right: 4px; }
+
 form { flex: 0 0 auto; margin: 0 12px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-textarea); }
 form:focus-within { border-color: #3f3f46; }
 textarea { width: 100%; resize: none; outline: none; background: transparent; border: 0; padding: 10px 12px 6px; color: var(--bright); font-family: var(--font-sans); font-size: 13px; line-height: 1.45; }
@@ -172,7 +180,12 @@ dd { margin: 0; color: var(--text); word-break: break-all; }
 .editor header { flex: 0 0 32px; padding: 0 12px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: center; }
 .editor header strong { font-family: var(--font-mono); font-size: 12px; color: var(--bright); }
 .editor header code { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
-.editor pre { min-height: 0; flex: 1; overflow: auto; padding: 12px; margin: 0; white-space: pre; color: var(--text); line-height: 1.5; font-family: var(--font-mono); font-size: 12px; }
+.editor pre, .editor .hl { min-height: 0; flex: 1; overflow: auto; margin: 0; line-height: 1.5; font-family: var(--font-mono); font-size: 12px; }
+.editor pre { padding: 12px; white-space: pre; color: var(--text); }
+.editor .hl { padding: 0; }
+.editor .hl :global(pre.shiki) { margin: 0; padding: 12px; background: transparent !important; min-height: 100%; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+.editor .hl :global(pre.shiki code) { background: transparent; }
+.editor .hl :global(pre.shiki .line) { display: block; }
 .empty { margin: 14px; color: var(--muted); font-size: 12px; }
 
 .login { width: 380px; margin: 13vh auto; display: flex; flex-direction: column; gap: 10px; }

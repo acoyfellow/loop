@@ -5,6 +5,7 @@
   import { Splitpanes, Pane } from "svelte-splitpanes";
   import type { Panel, ThreadSnapshot } from "$lib/thread";
   import { getThread, sendMessage, resetThread } from "./data.remote";
+  import { highlightSvelte } from "$lib/highlight";
 
   let { data } = $props();
   let live = $state<ThreadSnapshot | null>(null);
@@ -138,6 +139,20 @@
     return () => mq.removeEventListener("change", sync);
   });
 
+  // Lazy-highlighted source HTML, keyed by revision id so we cache across panel switches.
+  let highlightedSources = $state<Record<string, string>>({});
+  $effect(() => {
+    if (mainTab !== "source" || !selectedPanel) return;
+    const revisionId = selectedPanel.revision.id;
+    if (highlightedSources[revisionId]) return;
+    const source = selectedPanel.revision.source;
+    let cancelled = false;
+    highlightSvelte(source).then((html) => {
+      if (!cancelled) highlightedSources = { ...highlightedSources, [revisionId]: html };
+    }).catch(() => { /* fall back to plain pre */ });
+    return () => { cancelled = true; };
+  });
+
   function keydown(event: KeyboardEvent) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
@@ -181,9 +196,14 @@
     <strong>loop</strong>
     {#if thread}
       <nav>
-        <button class:active={mainTab === "thread"} onclick={() => mainTab = "thread"}>thread</button>
-        <button class:active={mainTab === "runtime"} onclick={() => mainTab = "runtime"}>runtime</button>
-        <button class:active={mainTab === "source"} onclick={() => mainTab = "source"}>source</button>
+        {#if isWide}
+          <button class:active={mainTab !== "source"} onclick={() => mainTab = "runtime"}>runtime</button>
+          <button class:active={mainTab === "source"} onclick={() => mainTab = "source"}>source</button>
+        {:else}
+          <button class:active={mainTab === "thread"} onclick={() => mainTab = "thread"}>thread</button>
+          <button class:active={mainTab === "runtime"} onclick={() => mainTab = "runtime"}>runtime</button>
+          <button class:active={mainTab === "source"} onclick={() => mainTab = "source"}>source</button>
+        {/if}
       </nav>
       <div class="bar-right">
         {#if page.data.user}
@@ -223,12 +243,23 @@
         <code>messages {thread.stats.messageCount}</code>
       </div>
       <div class="log">
-        {#each messages as message (message.key)}
-          <article class:user={message.kind === "user"}>
-            <span class="role">{message.kind === "pending" ? "assistant" : message.kind}</span>
-            <pre class:pending={message.kind === "pending"}>{message.text}</pre>
-          </article>
-        {/each}
+        {#if messages.length === 0}
+          <div class="intro">
+            <p>Ask the model to <strong>create or revise a panel</strong>, or to <strong>remember</strong> something. Generated Svelte 5 compiles on the Worker and mounts in <em>runtime</em>; its source lives in <em>source</em>; kept facts show up in <em>memory</em>.</p>
+            <ul>
+              <li><button class="plain inline" onclick={() => composer = "Create a panel 'clock' showing the current time, large and centered, on a dark background. Reply 'mounted'."}>create a panel 'clock' showing the time</button></li>
+              <li><button class="plain inline" onclick={() => composer = "Create a panel 'pulse' — a single neon-cyan ring breathing on a 3s sine wave. Reply 'mounted'."}>create a panel 'pulse' with a breathing ring</button></li>
+              <li><button class="plain inline" onclick={() => composer = "Remember that I prefer dark themes with monospaced numbers."}>remember a preference</button></li>
+            </ul>
+          </div>
+        {:else}
+          {#each messages as message (message.key)}
+            <article class:user={message.kind === "user"}>
+              <span class="role">{message.kind === "pending" ? "assistant" : message.kind}</span>
+              <pre class:pending={message.kind === "pending"}>{message.text}</pre>
+            </article>
+          {/each}
+        {/if}
       </div>
       <form onsubmit={(event) => { event.preventDefault(); submit(); }}>
         <textarea bind:value={composer} onkeydown={keydown} placeholder="message loop… e.g. revise the active-work surface and remember a convention" rows="4"></textarea>
@@ -267,7 +298,11 @@
         {#if selectedPanel}
           <div class="editor">
             <header><strong>{selectedPanel.id}.svelte</strong><code>{selectedPanel.revision.sourceHash}</code></header>
-            <pre>{selectedPanel.revision.source}</pre>
+            {#if highlightedSources[selectedPanel.revision.id]}
+              <div class="hl">{@html highlightedSources[selectedPanel.revision.id]}</div>
+            {:else}
+              <pre>{selectedPanel.revision.source}</pre>
+            {/if}
           </div>
         {:else}
           <p class="empty">No generated surfaces yet.</p>
