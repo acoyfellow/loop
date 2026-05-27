@@ -2,6 +2,8 @@
 
 One permanent agent thread on Cloudflare. The model creates, revises, and remembers the interface as you work.
 
+Live: <https://loop.coey.dev> · sign-up requires an invite password.
+
 ```
 you ──▶ owner thread (Durable Object)
             ├─ ledger        every message, action, checkpoint
@@ -20,7 +22,7 @@ bun install
 bun run dev          # starts both the SvelteKit app and the Worker
 ```
 
-Open <http://127.0.0.1:5176>.
+Open <http://127.0.0.1:5176>. The live deployment lives at <https://loop.coey.dev>.
 
 Try:
 
@@ -54,8 +56,7 @@ src/routes/+page.svelte     UI: thread, runtime, source, inspector
 src/routes/+page.server.ts  load thread snapshot
 src/routes/data.remote.ts   getThread, sendMessage, saveMemory
 worker/index.ts             HTTP boundary + owner routing
-worker/LoopDO.ts            ledger, turn, typed actions, memory, export
-worker/context.ts           rolling prompt + checkpoint trigger
+worker/LoopDO.ts            Loop extends Think — transcript, tools, memory, panels, export
 worker/panels.ts            Svelte 5 compile
 worker/types.ts             vocabulary
 wrangler.local.jsonc        local DO + remote Workers AI binding

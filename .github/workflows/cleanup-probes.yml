@@ -1,0 +1,27 @@
+name: cleanup-probes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install wrangler
+        run: bun add -g wrangler@4.95.0
+      - name: Show probe rows before
+        run: |
+          wrangler d1 execute loop-db --remote --json --command "SELECT id, email, createdAt FROM user WHERE email LIKE '%@example.invalid' ORDER BY createdAt;"
+      - name: Delete sessions, accounts, users for probe emails
+        run: |
+          wrangler d1 execute loop-db --remote --command "DELETE FROM session WHERE userId IN (SELECT id FROM user WHERE email LIKE '%@example.invalid');"
+          wrangler d1 execute loop-db --remote --command "DELETE FROM account WHERE userId IN (SELECT id FROM user WHERE email LIKE '%@example.invalid');"
+          wrangler d1 execute loop-db --remote --command "DELETE FROM user WHERE email LIKE '%@example.invalid';"
+      - name: Verify rows after
+        run: |
+          wrangler d1 execute loop-db --remote --json --command "SELECT COUNT(*) AS remaining FROM user WHERE email LIKE '%@example.invalid';"
