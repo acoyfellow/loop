@@ -1,0 +1,38 @@
+{
+  "name": "loop — chatbot that ships working artifacts",
+  "short_name": "loop",
+  "description": "A personal chatbot that ships working Svelte artifacts and remembers what you tell it. One long session, rolling memory backed by Cloudflare Vectorize.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "lang": "en",
+  "id": "loop.coey.dev",
+  "categories": ["productivity", "developer", "utilities"],
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    {
+      "src": "/og-flex.png",
+      "sizes": "1800x1077",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Five generative Svelte artifacts running side by side"
+    },
+    {
+      "src": "/og-source.png",
+      "sizes": "1800x1077",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Syntax-highlighted source of a generated Svelte artifact"
+    }
+  ]
+}

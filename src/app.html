@@ -2,16 +2,69 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta property="og:title" content="loop" />
-		<meta property="og:description" content="Persistent personal agent runtime with a mutable Svelte interface." />
-		<meta property="og:image" content="/og.jpg" />
-		<meta property="og:image:width" content="1200" />
-		<meta property="og:image:height" content="630" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="color-scheme" content="dark" />
+		<meta name="theme-color" content="#0a0a0a" />
+
+		<title>loop — chatbot that ships working artifacts</title>
+		<meta name="description" content="A personal chatbot that ships working Svelte artifacts and remembers what you tell it. One long session, rolling memory backed by Cloudflare Vectorize." />
+		<meta name="keywords" content="chatbot, AI agent, Svelte, Cloudflare Workers, Workers AI, Durable Objects, Vectorize, generative UI, code generation, personal assistant" />
+		<meta name="author" content="acoyfellow" />
+		<meta name="robots" content="index, follow, max-image-preview:large" />
+
+		<link rel="canonical" href="https://loop.coey.dev/" />
+		<link rel="manifest" href="/manifest.webmanifest" />
+
+		<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+		<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+		<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+		<link rel="mask-icon" href="/icon.svg" color="#22c55e" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="loop" />
+		<meta property="og:title" content="loop — chatbot that ships working artifacts" />
+		<meta property="og:description" content="One long-running chat. Every reply can compile a real Svelte 5 widget. The assistant takes notes and they stick." />
+		<meta property="og:url" content="https://loop.coey.dev/" />
+		<meta property="og:image" content="https://loop.coey.dev/og-flex.png" />
+		<meta property="og:image:width" content="1800" />
+		<meta property="og:image:height" content="1077" />
+		<meta property="og:image:alt" content="Five generative Svelte artifacts (Mandelbrot, oscilloscope, particles, hex grid, Matrix rain) running side by side in loop." />
+		<meta property="og:locale" content="en_US" />
+
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:image" content="/og.jpg" />
-		<meta name="twitter:title" content="loop" />
-		<meta name="twitter:description" content="Persistent personal agent runtime with a mutable Svelte interface." />
+		<meta name="twitter:title" content="loop — chatbot that ships working artifacts" />
+		<meta name="twitter:description" content="One long-running chat. Every reply can compile a real Svelte 5 widget. The assistant takes notes and they stick." />
+		<meta name="twitter:image" content="https://loop.coey.dev/og-flex.png" />
+		<meta name="twitter:image:alt" content="Five generative Svelte artifacts running side by side in loop." />
+		<meta name="twitter:creator" content="@acoyfellow" />
+
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="loop" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="format-detection" content="telephone=no" />
+
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "SoftwareApplication",
+				"name": "loop",
+				"alternateName": "loop — chatbot that ships working artifacts",
+				"description": "A personal chatbot that ships working Svelte artifacts and remembers what you tell it. One long session, rolling memory backed by Cloudflare Vectorize.",
+				"url": "https://loop.coey.dev/",
+				"image": "https://loop.coey.dev/og-flex.png",
+				"applicationCategory": "DeveloperApplication",
+				"operatingSystem": "Web",
+				"browserRequirements": "Requires a modern browser with JavaScript enabled.",
+				"offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+				"author": { "@type": "Person", "name": "acoyfellow", "url": "https://github.com/acoyfellow" },
+				"license": "https://opensource.org/license/mit",
+				"softwareHelp": "https://github.com/acoyfellow/loop#readme",
+				"sameAs": ["https://github.com/acoyfellow/loop"]
+			}
+		</script>
+
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
