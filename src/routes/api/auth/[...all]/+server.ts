@@ -26,8 +26,18 @@ function unavailable(): Response {
   });
 }
 
-async function gateSignup(event: Parameters<RequestHandler>[0]): Promise<{ ok: true; request: Request } | { ok: false; response: Response }> {
-  if (!event.url.pathname.endsWith("/sign-up/email")) return { ok: true, request: event.request };
+const SIGNUP_SUFFIXES = ["/sign-up/email", "/sign-up", "sign-up"];
+
+function isSignupPath(pathname: string): boolean {
+  return SIGNUP_SUFFIXES.some((suffix) => pathname.endsWith(suffix));
+}
+
+async function gateSignup(event: Parameters<RequestHandler>[0]): Promise<{ ok: true; request: Request; debug: Record<string, unknown> } | { ok: false; response: Response }> {
+  const debug = {
+    pathname: event.url.pathname,
+    matchedSignup: isSignupPath(event.url.pathname),
+  };
+  if (!isSignupPath(event.url.pathname)) return { ok: true, request: event.request, debug };
   const { raw, parsed } = await readJsonBody(event.request);
   const supplied = typeof parsed?.invitePassword === "string" ? parsed.invitePassword : null;
   if (!verifyInvite(event.platform?.env, supplied)) {
@@ -40,7 +50,7 @@ async function gateSignup(event: Parameters<RequestHandler>[0]): Promise<{ ok: t
     headers: event.request.headers,
     body: parsed ? JSON.stringify(cleaned) : raw,
   });
-  return { ok: true, request: forwarded };
+  return { ok: true, request: forwarded, debug };
 }
 
 export const GET: RequestHandler = async (event) => {
