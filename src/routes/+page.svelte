@@ -94,7 +94,8 @@
   function panelDocument(panel: Panel): string {
     const escapedCss = panel.revision.css.replace(/<\/style/gi, "<\\/style");
     const moduleUrl = `data:application/javascript;charset=utf-8,${encodeURIComponent(panel.revision.clientJs)}`;
-    return `<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify({ imports: { svelte: "https://esm.sh/svelte@5", "svelte/": "https://esm.sh/svelte@5/" } })}<\/script><style>body{margin:0;padding:0;background:#fff;color:#d4d4d4;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}</style><style>${escapedCss}</style></head><body><div id="app"></div><script type="module">import Component from ${JSON.stringify(moduleUrl)}; import { mount } from "svelte"; mount(Component,{target:document.getElementById("app")});<\/script></body></html>`;
+    const hostCss = `html,body{margin:0;padding:0;background:#fff;color:#d4d4d4;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}*{scrollbar-width:thin;scrollbar-color:transparent transparent}*:hover{scrollbar-color:#2a2a2e transparent}*::-webkit-scrollbar{width:6px;height:6px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:transparent;border-radius:3px}*:hover::-webkit-scrollbar-thumb{background:#2a2a2e}*::-webkit-scrollbar-thumb:hover{background:#3f3f46}*::-webkit-scrollbar-corner{background:transparent}`;
+    return `<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify({ imports: { svelte: "https://esm.sh/svelte@5", "svelte/": "https://esm.sh/svelte@5/" } })}<\/script><style>${hostCss}</style><style>${escapedCss}</style></head><body><div id="app"></div><script type="module">import Component from ${JSON.stringify(moduleUrl)}; import { mount } from "svelte"; mount(Component,{target:document.getElementById("app")});<\/script></body></html>`;
   }
 
   function openSource(panel: Panel) {
