@@ -65,6 +65,9 @@ async function chatTurn(env: Env, request: Request, stub: LoopStub) {
     },
     onDone() {},
     onError(message) { streamError = message; },
+  }).catch((cause: unknown) => {
+    // Swallow late rejections so they don't surface as unhandled when the timeout wins.
+    streamError = streamError ?? (cause instanceof Error ? cause.message : String(cause));
   });
   const timeoutPromise = new Promise<void>((resolve) => setTimeout(() => { timedOut = true; resolve(); }, CHAT_TIMEOUT_MS));
   await Promise.race([chatPromise, timeoutPromise]);
