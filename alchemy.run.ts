@@ -13,6 +13,7 @@ const app = await alchemy(projectName, {
           apiToken: alchemy.secret(process.env.CLOUDFLARE_API_TOKEN || ""),
           accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
           stateToken: alchemy.secret(process.env.ALCHEMY_STATE_TOKEN || ""),
+          forceUpdate: true,
         }),
 });
 
