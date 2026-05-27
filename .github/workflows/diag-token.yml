@@ -7,14 +7,17 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     env:
+      ALCHEMY_PASSWORD: ${{ secrets.ALCHEMY_PASSWORD }}
+      ALCHEMY_STATE_TOKEN: ${{ secrets.ALCHEMY_STATE_TOKEN }}
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       LOOP_INVITE_PASSWORD: ${{ secrets.LOOP_INVITE_PASSWORD }}
     steps:
       - name: probe
         run: |
           python3 <<'PY'
           import os, hashlib
-          val = os.environ.get("LOOP_INVITE_PASSWORD", "")
-          print(f"len={len(val)}")
-          print(f"sha8={hashlib.sha256(val.encode()).hexdigest()[:8]}")
-          print(f"pool_sha8={hashlib.sha256(b'pool').hexdigest()[:8]}")
+          for k in ("ALCHEMY_PASSWORD","ALCHEMY_STATE_TOKEN","BETTER_AUTH_SECRET","CLOUDFLARE_ACCOUNT_ID","LOOP_INVITE_PASSWORD"):
+              v = os.environ.get(k,"")
+              print(f"{k}: len={len(v)} sha8={hashlib.sha256(v.encode()).hexdigest()[:8]}")
           PY
