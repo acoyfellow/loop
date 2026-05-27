@@ -70,6 +70,14 @@ export const POST: RequestHandler = async (event) => {
   if (!db) return unavailable();
   try {
     const gate = await gateSignup(event);
+    if (event.url.searchParams.has("debug")) {
+      return new Response(JSON.stringify({
+        pathname: event.url.pathname,
+        matched: isSignupPath(event.url.pathname),
+        invite_len: typeof event.platform?.env?.LOOP_INVITE_PASSWORD === "string" ? event.platform!.env!.LOOP_INVITE_PASSWORD!.length : null,
+        gate_ok: gate.ok,
+      }, null, 2), { headers: { "Content-Type": "application/json" } });
+    }
     if (!gate.ok) return gate.response;
     const auth = initAuth(db, event.platform?.env, event.url.origin);
     return await auth.handler(gate.request);
