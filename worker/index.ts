@@ -1,24 +1,39 @@
-import { LoopDO, type LoopEnv } from "./LoopDO";
-import type { MemoryKind } from "./types";
+import { getAgentByName } from "agents";
+import { Loop, type LoopEnv } from "./LoopDO";
 import { compilePanel } from "./panels";
+import type { MemoryKind, ThreadSnapshot } from "./types";
 
 export interface Env extends LoopEnv {
-  LOOP: DurableObjectNamespace<LoopDO>;
+  LOOP: DurableObjectNamespace<Loop>;
   ENVIRONMENT?: string;
   DEV_OWNER?: string;
 }
 
-export { LoopDO };
+export { Loop };
 
-function cors(response: Response): Response {
+interface UIMessageChunk { type: string; delta?: string; text?: string; }
+interface ChatStreamCallback {
+  onEvent: (raw: string) => void;
+  onDone: () => void;
+  onError: (message: string) => void;
+}
+
+type LoopStub = {
+  chat: (message: string, callback: ChatStreamCallback) => Promise<void>;
+  loopSnapshot: () => Promise<ThreadSnapshot>;
+  signalMemory: (id: string, state: "wrong" | "forgotten") => Promise<unknown>;
+  exportLedger: () => Promise<unknown>;
+};
+
+function cors(response: Response, origin: string): Response {
   const headers = new Headers(response.headers);
-  headers.set("access-control-allow-origin", "http://127.0.0.1:5176");
+  headers.set("access-control-allow-origin", origin);
   headers.set("access-control-allow-methods", "GET,POST,OPTIONS");
   headers.set("access-control-allow-headers", "content-type,x-loop-owner");
   return new Response(response.body, { status: response.status, headers });
 }
 
-function owner(request: Request, env: Env): string {
+function ownerKey(request: Request, env: Env): string {
   const supplied = request.headers.get("x-loop-owner")?.trim();
   const owner = supplied || (env.ENVIRONMENT === "dev" ? env.DEV_OWNER ?? "local-jordan" : "");
   if (!owner) throw new Error("Authenticated owner is required.");
@@ -26,54 +41,69 @@ function owner(request: Request, env: Env): string {
   return owner;
 }
 
-async function thread(env: Env, request: Request): Promise<LoopDO> {
-  const id = env.LOOP.idFromName(owner(request, env));
-  return env.LOOP.get(id) as unknown as LoopDO;
+async function loopFor(env: Env, request: Request): Promise<LoopStub> {
+  const owner = ownerKey(request, env);
+  return (await getAgentByName(env.LOOP, owner, { routingRetry: { maxAttempts: 3 } })) as unknown as LoopStub;
+}
+
+async function chatTurn(env: Env, request: Request, stub: LoopStub) {
+  const body = (await request.json().catch(() => ({}))) as { text?: string };
+  const message = (body.text ?? "").trim();
+  if (!message) return Response.json({ error: "text required" }, { status: 400 });
+  let answer = "";
+  let streamError: string | undefined;
+  await stub.chat(message, {
+    onEvent(raw) {
+      try {
+        const chunk = JSON.parse(raw) as UIMessageChunk;
+        if (chunk.type === "text-delta") answer += chunk.delta ?? chunk.text ?? "";
+      } catch { /* control frame */ }
+    },
+    onDone() {},
+    onError(message) { streamError = message; },
+  });
+  if (streamError) return Response.json({ error: streamError }, { status: 502 });
+  const snapshot = await stub.loopSnapshot();
+  return Response.json({ ok: true, answer, snapshot });
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+    const origin = request.headers.get("origin") || "*";
+    if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }), origin);
     const url = new URL(request.url);
     try {
-      if (url.pathname === "/health") return cors(Response.json({ ok: true, name: "loop" }));
-      const instance = await thread(env, request);
+      if (url.pathname === "/health") return cors(Response.json({ ok: true, name: "loop" }), origin);
+      const stub = await loopFor(env, request);
       if (request.method === "GET" && url.pathname === "/api/thread") {
-        return cors(Response.json(await instance.snapshot()));
+        return cors(Response.json(await stub.loopSnapshot()), origin);
       }
       if (request.method === "POST" && url.pathname === "/api/messages") {
-        const body = await request.json() as { text?: string; requestId?: string };
-        return cors(Response.json(await instance.send(body.text ?? "", body.requestId)));
-      }
-      if (request.method === "POST" && url.pathname === "/api/memories") {
-        const body = await request.json() as { kind?: MemoryKind; text?: string };
-        if (!body.kind || !body.text) return cors(Response.json({ error: "kind and text required" }, { status: 400 }));
-        return cors(Response.json(await instance.remember(body.kind, body.text)));
+        return cors(await chatTurn(env, request, stub), origin);
       }
       if (request.method === "POST" && url.pathname.startsWith("/api/memories/") && url.pathname.endsWith("/signal")) {
         const id = decodeURIComponent(url.pathname.split("/")[3] ?? "");
-        const body = await request.json() as { state?: "wrong" | "forgotten" };
-        if (body.state !== "wrong" && body.state !== "forgotten") return cors(Response.json({ error: "state must be wrong or forgotten" }, { status: 400 }));
-        return cors(Response.json(await instance.signalMemory(id, body.state)));
-      }
-      if (request.method === "POST" && url.pathname === "/api/panels") {
-        const body = await request.json() as { id: string; title: string; source: string; pin?: boolean };
-        return cors(Response.json(await instance.createPanel(body)));
+        const body = (await request.json().catch(() => ({}))) as { state?: "wrong" | "forgotten" };
+        if (body.state !== "wrong" && body.state !== "forgotten") {
+          return cors(Response.json({ error: "state must be wrong or forgotten" }, { status: 400 }), origin);
+        }
+        return cors(Response.json(await stub.signalMemory(id, body.state)), origin);
       }
       if (request.method === "GET" && url.pathname === "/api/export") {
-        return cors(Response.json(await instance.exportLedger(), { headers: { "content-disposition": "attachment; filename=loop-ledger.json" } }));
+        return cors(Response.json(await stub.exportLedger()), origin);
       }
       if (request.method === "POST" && url.pathname === "/api/compile-panel") {
-        const body = await request.json() as { id?: string; title?: string; source?: string };
-        const compiled = await compilePanel({ id: body.id ?? "preview", title: body.title ?? "Preview", source: body.source ?? "" });
-        return cors(Response.json({ ok: true, panelId: compiled.panelId, sourceHash: compiled.sourceHash, clientJs: compiled.clientJs, css: compiled.css }));
+        const body = (await request.json().catch(() => ({}))) as { id?: string; title?: string; source?: string };
+        const revision = await compilePanel({ id: body.id ?? "preview", title: body.title ?? "Preview", source: body.source ?? "" });
+        return cors(Response.json({ ok: true, ...revision }), origin);
       }
-      return cors(Response.json({ error: "not found" }, { status: 404 }));
+      return cors(Response.json({ error: "not found" }, { status: 404 }), origin);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack ?? "" : "";
-      console.error("[loop worker]", message, stack);
-      return cors(Response.json({ error: message }, { status: 500 }));
+      console.error("[loop worker]", message, error instanceof Error ? error.stack : "");
+      return cors(Response.json({ error: message }, { status: 500 }), origin);
     }
   },
 } satisfies ExportedHandler<Env>;
+
+export type _MemoryKind = MemoryKind;

@@ -3,20 +3,13 @@ import type { PanelRevision } from "./types";
 
 const MAX_SOURCE_BYTES = 256 * 1024;
 
-export type CompiledPanel = PanelRevision & {
-  clientJs: string;
-  css: string;
-  svelteVersion: string;
-};
-
 export async function compilePanel(input: {
   id: string;
   title: string;
   source: string;
-  promptedByRevision?: number | null;
-}): Promise<CompiledPanel> {
-  const bytes = new TextEncoder().encode(input.source).byteLength;
+}): Promise<PanelRevision> {
   if (!input.source.trim()) throw new Error("Panel source is empty.");
+  const bytes = new TextEncoder().encode(input.source).byteLength;
   if (bytes > MAX_SOURCE_BYTES) throw new Error(`Panel source exceeds ${MAX_SOURCE_BYTES} bytes.`);
 
   let compiled;
@@ -37,7 +30,6 @@ export async function compilePanel(input: {
     css: compiled.css?.code ?? "",
     svelteVersion: VERSION,
     createdAt: new Date().toISOString(),
-    promptedByRevision: input.promptedByRevision ?? null,
   };
 }
 

@@ -6,11 +6,11 @@
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
     "bindings": [
-      { "name": "LOOP", "class_name": "LoopDO" }
+      { "name": "LOOP", "class_name": "Loop" }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["LoopDO"] }
+    { "tag": "v1", "new_sqlite_classes": ["Loop"] }
   ],
   "ai": { "binding": "AI", "remote": true },
   "vars": {

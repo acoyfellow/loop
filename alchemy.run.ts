@@ -1,7 +1,7 @@
 import alchemy from "alchemy";
 import { Ai, D1Database, DurableObjectNamespace, SvelteKit, Worker } from "alchemy/cloudflare";
 import { CloudflareStateStore, FileSystemStateStore } from "alchemy/state";
-import type { LoopDO } from "./worker/LoopDO.ts";
+import type { Loop } from "./worker/LoopDO.ts";
 
 const projectName = "loop";
 const app = await alchemy(projectName, {
@@ -21,8 +21,8 @@ const prefix = isProd ? projectName : `${app.stage}-${projectName}`;
 const productionDomain = process.env.LOOP_PUBLIC_DOMAIN || "loop.coey.dev";
 const productionUrl = `https://${productionDomain}`;
 
-const LOOP = DurableObjectNamespace<LoopDO>(`${projectName}-thread`, {
-  className: "LoopDO",
+const LOOP = DurableObjectNamespace<Loop>(`${projectName}-thread`, {
+  className: "Loop",
   scriptName: `${prefix}-worker`,
   sqlite: true,
 });

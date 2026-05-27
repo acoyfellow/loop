@@ -1,11 +1,10 @@
 export type MemoryKind = "preference" | "decision" | "fact" | "failure" | "open_loop";
 
-export type LoopEvent = {
-  revision: number;
+export type LoopMessage = {
   id: string;
-  type: string;
-  committedAt: string;
-  payload: Record<string, unknown>;
+  role: "user" | "assistant";
+  text: string;
+  createdAt: string;
 };
 
 export type Memory = {
@@ -13,7 +12,6 @@ export type Memory = {
   kind: MemoryKind;
   text: string;
   committedAt: string;
-  sourceRevision: number | null;
   state: "kept" | "wrong" | "forgotten";
 };
 
@@ -25,21 +23,24 @@ export type Panel = {
   updatedAt: string;
   revision: {
     id: string;
+    panelId: string;
+    title: string;
     source: string;
     sourceHash: string;
     clientJs: string;
     css: string;
     svelteVersion: string;
+    createdAt: string;
   };
 };
 
 export type ThreadSnapshot = {
-  events: LoopEvent[];
+  messages: LoopMessage[];
   panels: Panel[];
   memories: Memory[];
-  context: {
-    recentEventCount: number;
+  stats: {
+    messageCount: number;
+    panelCount: number;
     memoryCount: number;
-    checkpointSummary: string | null;
   };
 };

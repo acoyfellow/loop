@@ -18,19 +18,17 @@
   let password = $state("");
   let invitePassword = $state("");
   let authBusy = $state(false);
-  let sideTab = $state<"state" | "memory" | "events">("state");
+  let sideTab = $state<"state" | "memory" | "recent">("state");
   let mainTab = $state<"thread" | "runtime" | "source">("thread");
   let selectedPanelId = $state<string | null>(null);
 
   type DisplayMessage = { kind: "user" | "assistant" | "pending"; text: string; key: string };
   const messages = $derived<DisplayMessage[]>([
-    ...(thread?.events ?? [])
-      .filter((event) => event.type === "user_message" || event.type === "assistant_message")
-      .map((event) => ({
-        kind: event.type === "user_message" ? "user" as const : "assistant" as const,
-        text: String(event.payload.text ?? ""),
-        key: event.id,
-      })),
+    ...(thread?.messages ?? []).map((message) => ({
+      kind: message.role,
+      text: message.text,
+      key: message.id,
+    })),
     ...pendingTurns.flatMap((turn) => [
       { kind: "user" as const, text: turn.text, key: `pending-user-${turn.id}` },
       { kind: "pending" as const, text: "running…", key: `pending-assistant-${turn.id}` },
@@ -57,7 +55,7 @@
     error = "";
     composer = "";
     try {
-      const snapshot = await sendMessage({ text, requestId });
+      const snapshot = await sendMessage({ text });
       live = snapshot;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
@@ -161,7 +159,7 @@
       <section class="transcript" class:hidden-pane={mainTab !== "thread"}>
         <div class="section-head">
           <span>thread/main</span>
-          <code>events {thread.events.length} · context {thread.context.recentEventCount}</code>
+          <code>messages {thread.stats.messageCount}</code>
         </div>
         <div class="log">
           {#each messages as message (message.key)}
@@ -219,18 +217,16 @@
         <div class="tabs">
           <button class:chosen={sideTab === "state"} onclick={() => sideTab = "state"}>state</button>
           <button class:chosen={sideTab === "memory"} onclick={() => sideTab = "memory"}>memory</button>
-          <button class:chosen={sideTab === "events"} onclick={() => sideTab = "events"}>events</button>
+          <button class:chosen={sideTab === "recent"} onclick={() => sideTab = "recent"}>recent</button>
         </div>
         {#if sideTab === "state"}
           <dl>
             <dt>thread</dt><dd>main</dd>
             <dt>owner</dt><dd>{page.data.user?.email ?? "local-jordan"}</dd>
-            <dt>ledger</dt><dd>{thread.events.length} events</dd>
-            <dt>window</dt><dd>{thread.context.recentEventCount} recent</dd>
-            <dt>surfaces</dt><dd>{thread.panels.length}</dd>
-            <dt>memories</dt><dd>{thread.context.memoryCount}</dd>
+            <dt>messages</dt><dd>{thread.stats.messageCount}</dd>
+            <dt>surfaces</dt><dd>{thread.stats.panelCount}</dd>
+            <dt>memories</dt><dd>{thread.stats.memoryCount}</dd>
           </dl>
-          {#if thread.context.checkpointSummary}<pre class="summary">{thread.context.checkpointSummary}</pre>{/if}
         {:else if sideTab === "memory"}
           <div class="records">
             {#each thread.memories.filter((memory) => memory.state === "kept") as memory}
@@ -239,8 +235,8 @@
           </div>
         {:else}
           <div class="events">
-            {#each [...thread.events].reverse().slice(0, 30) as event}
-              <div><code>{event.revision}</code><span>{event.type}</span></div>
+            {#each [...thread.messages].reverse().slice(0, 30) as message}
+              <div><code>{message.role}</code><span>{message.text}</span></div>
             {/each}
           </div>
         {/if}

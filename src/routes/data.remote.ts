@@ -1,13 +1,13 @@
 import { command, getRequestEvent, query } from "$app/server";
 import { dev } from "$app/environment";
-import type { MemoryKind, ThreadSnapshot } from "$lib/thread";
+import type { ThreadSnapshot } from "$lib/thread";
 
 const LOCAL_OWNER = "local-jordan";
 
 function currentOwner(): string {
   const event = getRequestEvent();
   if (dev) {
-    const cookie = event.cookies.get("loop-owner");
+    const cookie = event.cookies.get("loop-owner") ?? event.request.headers.get("x-loop-owner") ?? null;
     return event.locals.user?.id ?? cookie ?? LOCAL_OWNER;
   }
   if (!event.locals.user) throw new Error("Sign in to access your loop.");
@@ -37,17 +37,13 @@ export const getThread = query(async (): Promise<ThreadSnapshot> => {
   return callWorker<ThreadSnapshot>("/api/thread");
 });
 
-export const sendMessage = command("unchecked", async (input: { text: string; requestId: string }): Promise<ThreadSnapshot> => {
-  const result = await callWorker<{ snapshot: ThreadSnapshot }>("/api/messages", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-  return result.snapshot;
-});
-
-export const saveMemory = command(
+export const sendMessage = command(
   "unchecked",
-  async (input: { kind: MemoryKind; text: string }): Promise<void> => {
-    await callWorker("/api/memories", { method: "POST", body: JSON.stringify(input) });
+  async (input: { text: string }): Promise<ThreadSnapshot> => {
+    const result = await callWorker<{ snapshot: ThreadSnapshot }>("/api/messages", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return result.snapshot;
   },
 );
