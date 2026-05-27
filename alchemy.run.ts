@@ -56,8 +56,9 @@ export const APP = await SvelteKit(`${projectName}-app`, {
   name: `${prefix}-app`,
   adopt: true,
   url: true,
-  bindings: { WORKER, DB },
-  env: {
+  bindings: {
+    WORKER,
+    DB,
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "local-loop-secret-change-before-deploy",
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || (isProd ? productionUrl : "http://127.0.0.1:5176"),
     ...optionalAppEnv,
