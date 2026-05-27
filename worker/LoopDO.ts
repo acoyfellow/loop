@@ -101,6 +101,22 @@ export class Loop extends Think<LoopEnv> {
     return this.loopSnapshot();
   }
 
+  async debugStorage(): Promise<{ tables: Array<{ name: string; count: number }> }> {
+    const tables = this.ctx.storage.sql
+      .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name")
+      .toArray();
+    const rows: Array<{ name: string; count: number }> = [];
+    for (const t of tables) {
+      try {
+        const n = this.ctx.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${t.name}`).toArray()[0]?.n ?? 0;
+        rows.push({ name: t.name, count: n });
+      } catch {
+        rows.push({ name: t.name, count: -1 });
+      }
+    }
+    return { tables: rows };
+  }
+
   async loopSnapshot(): Promise<ThreadSnapshot> {
     this.ensureTables();
     const transcript = this.transcript();

@@ -24,6 +24,7 @@ type LoopStub = {
   signalMemory: (id: string, state: "wrong" | "forgotten") => Promise<unknown>;
   exportLedger: () => Promise<unknown>;
   resetThread: () => Promise<ThreadSnapshot>;
+  debugStorage: () => Promise<{ tables: Array<{ name: string; count: number }> }>;
 };
 
 function cors(response: Response, origin: string): Response {
@@ -116,6 +117,9 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/api/reset") {
         return cors(Response.json({ ok: true, snapshot: await stub.resetThread() }), origin);
+      }
+      if (request.method === "GET" && url.pathname === "/api/debug-storage") {
+        return cors(Response.json(await stub.debugStorage()), origin);
       }
       if (request.method === "POST" && url.pathname === "/api/compile-panel") {
         const body = (await request.json().catch(() => ({}))) as { id?: string; title?: string; source?: string };

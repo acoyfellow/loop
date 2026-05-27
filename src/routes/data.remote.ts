@@ -61,3 +61,7 @@ export const resetThread = command(
     return result.snapshot;
   },
 );
+
+export const debugStorage = query(async (): Promise<{ tables: Array<{ name: string; count: number }> }> => {
+  return callWorker<{ tables: Array<{ name: string; count: number }> }>("/api/debug-storage");
+});
