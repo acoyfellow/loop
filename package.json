@@ -16,11 +16,13 @@
     "deploy": "alchemy deploy --adopt",
     "destroy": "alchemy destroy",
     "prepare": "svelte-kit sync || echo ''",
+    "postinstall": "node scripts/install-hooks.mjs",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit -p worker/tsconfig.json",
     "test": "vitest run",
     "e2e": "playwright test",
     "stress": "node tests/stress-api.mjs",
-    "verify": "bun run check && bun run test && bun run build"
+    "verify": "bun run check && bun run test && bun run build",
+    "ship": "node scripts/ship.mjs --watch"
   },
   "dependencies": {
     "@cloudflare/think": "^0.7.3",

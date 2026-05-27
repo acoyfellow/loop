@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# Local CI gate. Run `bun run verify` before allowing a push.
+# Skip with: git push --no-verify
+
+set -e
+
+if [ -n "$LOOP_SKIP_VERIFY" ]; then
+  echo "loop: LOOP_SKIP_VERIFY set, skipping pre-push verify"
+  exit 0
+fi
+
+echo "loop: pre-push verify (set LOOP_SKIP_VERIFY=1 or use --no-verify to skip)"
+bun run verify

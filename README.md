@@ -43,11 +43,22 @@ Reload — everything survives. `events` shows the immutable record.
 ```sh
 bun run check    # SvelteKit + Worker type-check
 bun run test     # context / compiler unit tests
+bun run verify   # check + test + build (runs automatically on git push)
 bun run e2e      # real Workers AI: panel, memory, durable reload
 bun run stress   # real inference + rolling checkpoint + export
 ```
 
 `e2e` and `stress` call Workers AI and consume usage.
+
+## Ship
+
+CI is manual-only. `verify` runs locally on every `git push` via `.githooks/pre-push` (installed automatically by `bun install`). To deploy to <https://loop.coey.dev>:
+
+```sh
+bun run ship    # verify + push + trigger deploy workflow + watch
+```
+
+Skip the local gate with `git push --no-verify` or `LOOP_SKIP_VERIFY=1`. Trigger workflows by hand any time with `gh workflow run {deploy,verify,inference} --repo acoyfellow/loop`.
 
 ## Layout
 

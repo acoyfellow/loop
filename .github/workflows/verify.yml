@@ -1,15 +1,7 @@
 name: verify
 
 on:
-  pull_request:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - ".github/**"
-      - "LICENSE"
-      - "SECURITY.md"
-      - "CONTRIBUTING.md"
+  workflow_dispatch:
 
 concurrency:
   group: verify-${{ github.ref }}
