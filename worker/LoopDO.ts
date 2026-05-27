@@ -93,21 +93,11 @@ export class Loop extends Think<LoopEnv> {
 
   async resetThread(): Promise<ThreadSnapshot> {
     this.ensureTables();
-    // Abort any in-flight turn, drop Think's transcript, and wipe Loop's tables.
     try { this.resetTurnState(); } catch { /* no active turn */ }
-    await this.clearMessages();
+    try { await this.clearMessages(); } catch { /* best-effort */ }
     this.ctx.storage.sql.exec("DELETE FROM panels");
     this.ctx.storage.sql.exec("DELETE FROM panel_revisions");
     this.ctx.storage.sql.exec("DELETE FROM memories");
-    // Defensive: hit any Think-owned message tables we can find. Names are heuristic;
-    // failures are swallowed because the schema may differ across Think versions.
-    for (const table of ["messages", "think_messages", "chat_messages", "streams", "think_streams"]) {
-      try { this.ctx.storage.sql.exec(`DELETE FROM ${table}`); } catch { /* not present */ }
-    }
-    // Verify by reading back the transcript through Think's own getter; if anything
-    // remains, clearMessages again with one more pass.
-    const remaining = await this.getMessages().catch(() => []);
-    if (remaining.length > 0) await this.clearMessages().catch(() => undefined);
     return this.loopSnapshot();
   }
 
