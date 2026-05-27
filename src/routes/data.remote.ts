@@ -28,8 +28,14 @@ async function callWorker<T>(path: string, init?: RequestInit): Promise<T> {
   const response = dev
     ? await fetch(`http://127.0.0.1:1337${path}`, requestInit)
     : await event.platform!.env.WORKER.fetch(new Request(`http://loop${path}`, requestInit));
-  const body = await response.json() as T & { error?: string };
-  if (!response.ok) throw new Error(body.error ?? `Loop request failed (${response.status})`);
+  const body = await response.json() as T & { error?: string; snapshot?: unknown };
+  if (!response.ok) {
+    // 504/502 responses still include a snapshot for the UI; attach to thrown error so the caller can recover.
+    const err = new Error(body.error ?? `Loop request failed (${response.status})`) as Error & { snapshot?: unknown; status?: number };
+    err.snapshot = body.snapshot;
+    err.status = response.status;
+    throw err;
+  }
   return body;
 }
 
@@ -44,6 +50,14 @@ export const sendMessage = command(
       method: "POST",
       body: JSON.stringify(input),
     });
+    return result.snapshot;
+  },
+);
+
+export const resetThread = command(
+  "unchecked",
+  async (): Promise<ThreadSnapshot> => {
+    const result = await callWorker<{ snapshot: ThreadSnapshot }>("/api/reset", { method: "POST" });
     return result.snapshot;
   },
 );

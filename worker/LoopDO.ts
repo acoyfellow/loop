@@ -91,6 +91,17 @@ export class Loop extends Think<LoopEnv> {
     };
   }
 
+  async resetThread(): Promise<ThreadSnapshot> {
+    this.ensureTables();
+    // Abort any in-flight turn, drop Think's transcript, and wipe Loop's tables.
+    try { this.resetTurnState(); } catch { /* no active turn */ }
+    await this.clearMessages();
+    this.ctx.storage.sql.exec("DELETE FROM panels");
+    this.ctx.storage.sql.exec("DELETE FROM panel_revisions");
+    this.ctx.storage.sql.exec("DELETE FROM memories");
+    return this.loopSnapshot();
+  }
+
   async loopSnapshot(): Promise<ThreadSnapshot> {
     this.ensureTables();
     const transcript = this.transcript();

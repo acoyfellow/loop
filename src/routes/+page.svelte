@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import { signIn, signOut, signUp } from "$lib/auth-client";
   import type { Panel, ThreadSnapshot } from "$lib/thread";
-  import { getThread, sendMessage } from "./data.remote";
+  import { getThread, sendMessage, resetThread } from "./data.remote";
 
   let { data } = $props();
   let live = $state<ThreadSnapshot | null>(null);
@@ -58,12 +58,38 @@
       const snapshot = await sendMessage({ text });
       live = snapshot;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      const err = cause as Error & { snapshot?: ThreadSnapshot; status?: number };
+      if (err?.snapshot) live = err.snapshot;
+      error = err instanceof Error ? err.message : String(err);
     } finally {
       inflight -= 1;
       pendingTurns = pendingTurns.filter((turn) => turn.id !== requestId);
     }
   }
+
+  let resetting = $state(false);
+  async function resetLoop() {
+    if (!confirm("Reset the loop? Drops all messages, panels, and memories.")) return;
+    resetting = true;
+    error = "";
+    try {
+      live = await resetThread({});
+      pendingTurns = [];
+      selectedPanelId = null;
+      mainTab = "thread";
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      resetting = false;
+    }
+  }
+
+  const stuckOrphan = $derived(
+    thread &&
+    thread.messages.length > 0 &&
+    thread.messages[thread.messages.length - 1].role === "user" &&
+    inflight === 0,
+  );
 
   function panelDocument(panel: Panel): string {
     const escapedCss = panel.revision.css.replace(/<\/style/gi, "<\\/style");
@@ -122,15 +148,20 @@
 <div class="app">
   <header class="bar">
     <strong>loop</strong>
-    <nav>
-      <button class:active={mainTab === "thread"} onclick={() => mainTab = "thread"}>thread</button>
-      <button class:active={mainTab === "runtime"} onclick={() => mainTab = "runtime"}>runtime</button>
-      <button class:active={mainTab === "source"} onclick={() => mainTab = "source"}>source</button>
-    </nav>
-    <div class="bar-right">
-      <code>{page.data.user?.email ?? "dev/local-jordan"}</code>
-      {#if page.data.user}<button class="plain" onclick={() => signOut()}>sign out</button>{/if}
-    </div>
+    {#if thread}
+      <nav>
+        <button class:active={mainTab === "thread"} onclick={() => mainTab = "thread"}>thread</button>
+        <button class:active={mainTab === "runtime"} onclick={() => mainTab = "runtime"}>runtime</button>
+        <button class:active={mainTab === "source"} onclick={() => mainTab = "source"}>source</button>
+      </nav>
+      <div class="bar-right">
+        {#if page.data.user}
+          <code>{page.data.user.email}</code>
+          <button class="plain" disabled={resetting} onclick={resetLoop}>{resetting ? "resetting…" : "reset"}</button>
+          <button class="plain" onclick={() => signOut()}>sign out</button>
+        {/if}
+      </div>
+    {/if}
   </header>
 
   {#if !thread}
@@ -174,6 +205,9 @@
           <footer><code>⌘↵ send</code><span class="queue">{inflight ? `${inflight} in flight` : ""}</span><button disabled={!composer.trim()}>send</button></footer>
         </form>
         {#if error}<pre class="error">{error}</pre>{/if}
+        {#if stuckOrphan}
+          <pre class="error">Last turn didn’t produce an assistant reply. Try again or <button class="plain inline" onclick={resetLoop}>reset the loop</button>.</pre>
+        {/if}
       </section>
 
       <section class="runtime" class:hidden-pane={mainTab === "source"}>
@@ -222,7 +256,7 @@
         {#if sideTab === "state"}
           <dl>
             <dt>thread</dt><dd>main</dd>
-            <dt>owner</dt><dd>{page.data.user?.email ?? "local-jordan"}</dd>
+            <dt>owner</dt><dd>{page.data.user?.email ?? "—"}</dd>
             <dt>messages</dt><dd>{thread.stats.messageCount}</dd>
             <dt>surfaces</dt><dd>{thread.stats.panelCount}</dd>
             <dt>memories</dt><dd>{thread.stats.memoryCount}</dd>

@@ -23,6 +23,7 @@ type LoopStub = {
   loopSnapshot: () => Promise<ThreadSnapshot>;
   signalMemory: (id: string, state: "wrong" | "forgotten") => Promise<unknown>;
   exportLedger: () => Promise<unknown>;
+  resetThread: () => Promise<ThreadSnapshot>;
 };
 
 function cors(response: Response, origin: string): Response {
@@ -46,13 +47,16 @@ async function loopFor(env: Env, request: Request): Promise<LoopStub> {
   return (await getAgentByName(env.LOOP, owner, { routingRetry: { maxAttempts: 3 } })) as unknown as LoopStub;
 }
 
+const CHAT_TIMEOUT_MS = 75_000;
+
 async function chatTurn(env: Env, request: Request, stub: LoopStub) {
   const body = (await request.json().catch(() => ({}))) as { text?: string };
   const message = (body.text ?? "").trim();
   if (!message) return Response.json({ error: "text required" }, { status: 400 });
   let answer = "";
   let streamError: string | undefined;
-  await stub.chat(message, {
+  let timedOut = false;
+  const chatPromise = stub.chat(message, {
     onEvent(raw) {
       try {
         const chunk = JSON.parse(raw) as UIMessageChunk;
@@ -62,7 +66,22 @@ async function chatTurn(env: Env, request: Request, stub: LoopStub) {
     onDone() {},
     onError(message) { streamError = message; },
   });
-  if (streamError) return Response.json({ error: streamError }, { status: 502 });
+  const timeoutPromise = new Promise<void>((resolve) => setTimeout(() => { timedOut = true; resolve(); }, CHAT_TIMEOUT_MS));
+  await Promise.race([chatPromise, timeoutPromise]);
+  if (timedOut) {
+    const snapshot = await stub.loopSnapshot();
+    return Response.json({
+      ok: false,
+      timedOut: true,
+      answer: answer || "(no response before timeout)",
+      snapshot,
+      error: `Inference exceeded ${CHAT_TIMEOUT_MS / 1000}s. Try a smaller ask or reset the thread.`,
+    }, { status: 504 });
+  }
+  if (streamError) {
+    const snapshot = await stub.loopSnapshot();
+    return Response.json({ ok: false, error: streamError, snapshot }, { status: 502 });
+  }
   const snapshot = await stub.loopSnapshot();
   return Response.json({ ok: true, answer, snapshot });
 }
@@ -91,6 +110,9 @@ export default {
       }
       if (request.method === "GET" && url.pathname === "/api/export") {
         return cors(Response.json(await stub.exportLedger()), origin);
+      }
+      if (request.method === "POST" && url.pathname === "/api/reset") {
+        return cors(Response.json({ ok: true, snapshot: await stub.resetThread() }), origin);
       }
       if (request.method === "POST" && url.pathname === "/api/compile-panel") {
         const body = (await request.json().catch(() => ({}))) as { id?: string; title?: string; source?: string };
